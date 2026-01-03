@@ -1,6 +1,8 @@
 from typing import Protocol, runtime_checkable
 
 from ..types_defs import PropertyDict, PropertyValue, ResultRow
+from .file_classifier import FileClassifier, SourceType
+from .file_classifier import FileClassifier, SourceType
 
 
 @runtime_checkable
