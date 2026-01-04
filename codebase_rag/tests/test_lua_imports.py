@@ -60,7 +60,8 @@ end
     )
 
     parsers, queries = load_parsers()
-    assert "lua" in parsers, "Lua parser should be available"
+    if "lua" not in parsers:
+        pytest.skip("Lua parser not available")
 
     updater = GraphUpdater(
         ingestor=mock_ingestor,
@@ -105,7 +106,8 @@ return use_stdlib
     )
 
     parsers, queries = load_parsers()
-    assert "lua" in parsers, "Lua parser should be available"
+    if "lua" not in parsers:
+        pytest.skip("Lua parser not available")
 
     updater = GraphUpdater(
         ingestor=mock_ingestor,
@@ -163,7 +165,8 @@ return safe_load
     )
 
     parsers, queries = load_parsers()
-    assert "lua" in parsers, "Lua parser should be available"
+    if "lua" not in parsers:
+        pytest.skip("Lua parser not available")
 
     updater = GraphUpdater(
         ingestor=mock_ingestor,

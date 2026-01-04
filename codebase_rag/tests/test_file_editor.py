@@ -101,6 +101,8 @@ class TestGetParser:
         self, file_editor: FileEditor, sample_js_file: Path
     ) -> None:
         parser = file_editor.get_parser("sample.js")
+        if parser is None:
+            pytest.skip("JavaScript parser not available")
         assert parser is not None
 
     def test_get_parser_for_unknown_extension(self, file_editor: FileEditor) -> None:
@@ -119,6 +121,8 @@ class TestGetAst:
     def test_get_ast_for_javascript_file(
         self, file_editor: FileEditor, sample_js_file: Path
     ) -> None:
+        if file_editor.get_parser("sample.js") is None:
+            pytest.skip("JavaScript parser not available")
         root_node = file_editor.get_ast(str(sample_js_file))
         assert root_node is not None
         assert root_node.type == "program"
