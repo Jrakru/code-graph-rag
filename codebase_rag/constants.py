@@ -169,6 +169,8 @@ KEY_CREATED = "created"
 KEY_FROM_VAL = "from_val"
 KEY_TO_VAL = "to_val"
 KEY_VERSION_SPEC = "version_spec"
+KEY_CONFIDENCE = "confidence"
+KEY_RESOLUTION_METHOD = "resolution_method"
 
 ERR_SUBSTR_ALREADY_EXISTS = "already exists"
 ERR_SUBSTR_CONSTRAINT = "constraint"

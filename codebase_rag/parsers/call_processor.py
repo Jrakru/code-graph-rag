@@ -8,9 +8,11 @@ from tree_sitter import Node, QueryCursor
 from .. import constants as cs
 from .. import logs as ls
 from ..language_spec import LanguageSpec
+from ..protocols.validation import ConfidenceScorerProtocol
 from ..services import IngestorProtocol
+from ..services.confidence_scorer import ConfidenceScorer, ResolutionMethod
 from ..types_defs import FunctionRegistryTrieProtocol, LanguageQueries
-from .call_resolver import CallResolver
+from .call_resolver import CallResolver, ResolutionResult
 from .cpp import utils as cpp_utils
 from .import_processor import ImportProcessor
 from .type_inference import TypeInferenceEngine
@@ -27,10 +29,12 @@ class CallProcessor:
         import_processor: ImportProcessor,
         type_inference: TypeInferenceEngine,
         class_inheritance: dict[str, list[str]],
+        confidence_scorer: ConfidenceScorerProtocol | None = None,
     ) -> None:
         self.ingestor = ingestor
         self.repo_path = repo_path
         self.project_name = project_name
+        self._confidence_scorer = confidence_scorer or ConfidenceScorer()
 
         self._resolver = CallResolver(
             function_registry=function_registry,
@@ -297,19 +301,43 @@ class CallProcessor:
                     call_node, module_qn, local_var_types
                 )
             else:
-                callee_info = self._resolver.resolve_function_call(
+                callee_info = self._resolver.resolve_function_call_with_confidence(
                     call_name, module_qn, local_var_types, class_context
                 )
+            resolution: ResolutionResult | None = None
             if callee_info:
-                callee_type, callee_qn = callee_info
+                if isinstance(callee_info, ResolutionResult):
+                    resolution = callee_info
+                else:
+                    callee_type, callee_qn = callee_info
+                    resolution = ResolutionResult(
+                        callee_type=callee_type,
+                        callee_qn=callee_qn,
+                        method=ResolutionMethod.TYPE_INFERENCE,
+                    )
             elif builtin_info := self._resolver.resolve_builtin_call(call_name):
                 callee_type, callee_qn = builtin_info
+                resolution = ResolutionResult(
+                    callee_type=callee_type,
+                    callee_qn=callee_qn,
+                    method=ResolutionMethod.DIRECT_IMPORT,
+                )
             elif operator_info := self._resolver.resolve_cpp_operator_call(
                 call_name, module_qn
             ):
                 callee_type, callee_qn = operator_info
+                resolution = ResolutionResult(
+                    callee_type=callee_type,
+                    callee_qn=callee_qn,
+                    method=ResolutionMethod.DIRECT_IMPORT,
+                )
             else:
                 continue
+            if not resolution:
+                continue
+
+            callee_type = resolution.callee_type
+            callee_qn = resolution.callee_qn
             logger.debug(
                 ls.CALL_FOUND.format(
                     caller=caller_qn,
@@ -319,10 +347,17 @@ class CallProcessor:
                 )
             )
 
+            confidence = self._confidence_scorer.score(
+                resolution.method, ambiguity_count=resolution.ambiguity_count
+            )
             self.ingestor.ensure_relationship_batch(
                 (caller_type, cs.KEY_QUALIFIED_NAME, caller_qn),
                 cs.RelationshipType.CALLS,
                 (callee_type, cs.KEY_QUALIFIED_NAME, callee_qn),
+                properties={
+                    cs.KEY_CONFIDENCE: confidence,
+                    cs.KEY_RESOLUTION_METHOD: resolution.method.value,
+                },
             )
 
     def _build_nested_qualified_name(

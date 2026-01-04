@@ -17,7 +17,8 @@ def _format_relationship_schema(schema: RelationshipSchema) -> str:
         sources = f"({sources})"
     if len(schema.targets) > 1:
         targets = f"({targets})"
-    return f"- {sources} -[:{schema.rel_type}]-> {targets}"
+    props = f" {schema.properties}" if schema.properties else ""
+    return f"- {sources} -[:{schema.rel_type}{props}]-> {targets}"
 
 
 def build_node_labels_section() -> str:
