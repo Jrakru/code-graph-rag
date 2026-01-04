@@ -3,9 +3,26 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from typing import TYPE_CHECKING
+
 from .. import constants as cs
 from ..types_defs import PropertyValue, ResultRow
-from . import QueryProtocol
+
+if TYPE_CHECKING:
+    from ..types_defs import ResultRow as ResultRowType
+
+# Inline protocol definition to avoid circular import
+from typing import Protocol
+
+from ..types_defs import PropertyDict
+
+
+class QueryProtocol(Protocol):
+    def fetch_all(
+        self, query: str, params: PropertyDict | None = None
+    ) -> list[ResultRow]: ...
+
+    def execute_write(self, query: str, params: PropertyDict | None = None) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -44,9 +61,7 @@ class ValidationEngine:
             return True
 
         query = f"MATCH (n:{label} {{{key}: $value}}) RETURN count(n) as count"
-        rows: list[ResultRow] = self._query_service.fetch_all(
-            query, {"value": value}
-        )
+        rows: list[ResultRow] = self._query_service.fetch_all(query, {"value": value})
         exists = self._count_from_rows(rows) > 0
         if cache_key is not None:
             self._cache[cache_key] = exists
