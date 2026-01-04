@@ -52,6 +52,12 @@ RETURN n.name AS name, n.start_line AS start, n.end_line AS end, m.path AS path,
 LIMIT 1
 """
 
+CYPHER_FETCH_FILE_HASHES = """
+MATCH (f:File)
+WHERE f.path IN $paths
+RETURN f.path AS path, f.file_hash AS file_hash, f.parsed_at AS parsed_at
+"""
+
 
 def wrap_with_unwind(query: str) -> str:
     return f"UNWIND $batch AS row\n{query}"
