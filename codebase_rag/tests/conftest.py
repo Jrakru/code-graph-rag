@@ -278,6 +278,79 @@ def memgraph_connection(
     conn.close()
 
 
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    available = _get_available_language_values()
+    missing = {lang.value for lang in SupportedLanguage} - available
+    if not missing:
+        return
+    for item in items:
+        if "all_languages" in item.name and missing:
+            item.add_marker(
+                pytest.mark.skip(reason="Missing parser(s) for one or more languages")
+            )
+            continue
+        language = _language_for_item(item)
+        if language in missing:
+            item.add_marker(pytest.mark.skip(reason=f"{language} parser not available"))
+
+
+_AVAILABLE_LANGUAGE_VALUES: set[str] | None = None
+
+
+def _get_available_language_values() -> set[str]:
+    global _AVAILABLE_LANGUAGE_VALUES
+    if _AVAILABLE_LANGUAGE_VALUES is None:
+        parsers, _ = load_parsers()
+        _AVAILABLE_LANGUAGE_VALUES = {lang.value for lang in parsers}
+    return _AVAILABLE_LANGUAGE_VALUES
+
+
+def _language_for_item(item: pytest.Item) -> str | None:
+    filename = Path(str(item.fspath)).name.lower()
+    name = item.name.lower()
+
+    language_prefixes: dict[str, tuple[str, ...]] = {
+        "cpp": ("test_cpp_",),
+        "rust": ("test_rust_",),
+        "typescript": ("test_typescript_",),
+        "javascript": ("test_javascript_",),
+        "lua": ("test_lua_",),
+        "java": ("test_java_",),
+        "go": ("test_go_",),
+        "scala": ("test_scala_",),
+        "php": ("test_php_",),
+        "c-sharp": ("test_csharp_", "test_c_sharp_"),
+    }
+
+    for language, prefixes in language_prefixes.items():
+        if any(filename.startswith(prefix) for prefix in prefixes):
+            return language
+
+    if "typescript" in name or "ts_" in name:
+        return "typescript"
+    if "javascript" in name or "js_" in name:
+        return "javascript"
+    if "csharp" in name or "c_sharp" in name:
+        return "c-sharp"
+    if "cpp" in name:
+        return "cpp"
+    if "rust" in name:
+        return "rust"
+    if "lua" in name:
+        return "lua"
+    if "java" in name:
+        return "java"
+    if "go_" in name:
+        return "go"
+    if "scala" in name:
+        return "scala"
+    if "php" in name:
+        return "php"
+    return None
+
+
 @pytest.fixture(scope="function")
 def memgraph_ingestor(
     memgraph_container: dict[str, str | int],
