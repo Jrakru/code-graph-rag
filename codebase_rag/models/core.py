@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -5,8 +7,8 @@ from typing import TYPE_CHECKING, NamedTuple
 
 from rich.console import Console
 
-from .constants import SupportedLanguage
-from .types_defs import MCPHandlerType, MCPInputSchema, PropertyValue
+from ..constants import SupportedLanguage
+from ..types_defs import MCPHandlerType, MCPInputSchema, PropertyValue
 
 if TYPE_CHECKING:
     from tree_sitter import Node
@@ -50,7 +52,7 @@ class GraphRelationship:
 class FQNSpec(NamedTuple):
     scope_node_types: frozenset[str]
     function_node_types: frozenset[str]
-    get_name: Callable[["Node"], str | None]
+    get_name: Callable[[Node], str | None]
     file_to_module_parts: Callable[[Path, Path], list[str]]
 
 
