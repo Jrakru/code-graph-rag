@@ -13,14 +13,16 @@ from unittest.mock import MagicMock
 import pytest
 from loguru import logger
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+
+from codebase_rag.constants import SupportedLanguage
 from codebase_rag.graph_updater import GraphUpdater
+from codebase_rag.language_spec import get_language_for_extension
 from codebase_rag.parser_loader import load_parsers
 from codebase_rag.services.graph_service import MemgraphIngestor
 
 if TYPE_CHECKING:
     import mgclient  # ty: ignore[unresolved-import]
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 
 class NodeProtocol(Protocol):
@@ -115,6 +117,8 @@ def create_and_run_updater(
     parsers, queries = load_parsers()
     if skip_if_missing and skip_if_missing not in parsers:
         pytest.skip(f"{skip_if_missing} parser not available")
+    if skip_if_missing is None:
+        _skip_if_missing_parser(repo_path, parsers)
     updater = GraphUpdater(
         ingestor=mock_ingestor,
         repo_path=repo_path,
@@ -132,6 +136,21 @@ def get_relationships(mock_ingestor: MagicMock, rel_type: str) -> list:
         for c in mock_ingestor.ensure_relationship_batch.call_args_list
         if c.args[1] == rel_type
     ]
+
+
+def _skip_if_missing_parser(
+    repo_path: Path, parsers: dict[SupportedLanguage, object]
+) -> None:
+    missing: set[str] = set()
+    for path in repo_path.rglob("*"):
+        if not path.is_file():
+            continue
+        language = get_language_for_extension(path.suffix)
+        if language and language not in parsers:
+            missing.add(language.value)
+    if missing:
+        missing_list = ", ".join(sorted(missing))
+        pytest.skip(f"Missing parser(s) for: {missing_list}")
 
 
 def get_nodes(mock_ingestor: MagicMock, node_type: str) -> list:
@@ -257,6 +276,79 @@ def memgraph_connection(
     cursor.execute("MATCH (n) DETACH DELETE n")
     cursor.close()
     conn.close()
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    available = _get_available_language_values()
+    missing = {lang.value for lang in SupportedLanguage} - available
+    if not missing:
+        return
+    for item in items:
+        if "all_languages" in item.name and missing:
+            item.add_marker(
+                pytest.mark.skip(reason="Missing parser(s) for one or more languages")
+            )
+            continue
+        language = _language_for_item(item)
+        if language in missing:
+            item.add_marker(pytest.mark.skip(reason=f"{language} parser not available"))
+
+
+_AVAILABLE_LANGUAGE_VALUES: set[str] | None = None
+
+
+def _get_available_language_values() -> set[str]:
+    global _AVAILABLE_LANGUAGE_VALUES
+    if _AVAILABLE_LANGUAGE_VALUES is None:
+        parsers, _ = load_parsers()
+        _AVAILABLE_LANGUAGE_VALUES = {lang.value for lang in parsers}
+    return _AVAILABLE_LANGUAGE_VALUES
+
+
+def _language_for_item(item: pytest.Item) -> str | None:
+    filename = Path(str(item.fspath)).name.lower()
+    name = item.name.lower()
+
+    language_prefixes: dict[str, tuple[str, ...]] = {
+        "cpp": ("test_cpp_",),
+        "rust": ("test_rust_",),
+        "typescript": ("test_typescript_",),
+        "javascript": ("test_javascript_",),
+        "lua": ("test_lua_",),
+        "java": ("test_java_",),
+        "go": ("test_go_",),
+        "scala": ("test_scala_",),
+        "php": ("test_php_",),
+        "c-sharp": ("test_csharp_", "test_c_sharp_"),
+    }
+
+    for language, prefixes in language_prefixes.items():
+        if any(filename.startswith(prefix) for prefix in prefixes):
+            return language
+
+    if "typescript" in name or "ts_" in name:
+        return "typescript"
+    if "javascript" in name or "js_" in name:
+        return "javascript"
+    if "csharp" in name or "c_sharp" in name:
+        return "c-sharp"
+    if "cpp" in name:
+        return "cpp"
+    if "rust" in name:
+        return "rust"
+    if "lua" in name:
+        return "lua"
+    if "java" in name:
+        return "java"
+    if "go_" in name:
+        return "go"
+    if "scala" in name:
+        return "scala"
+    if "php" in name:
+        return "php"
+    return None
 
 
 @pytest.fixture(scope="function")

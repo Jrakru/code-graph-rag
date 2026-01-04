@@ -151,6 +151,9 @@ GRAPH_ANALYSIS_COMPLETE = "Analysis complete!"
 GRAPH_ANALYSIS_ERROR = "Error analyzing graph: {error}"
 GRAPH_FILE_NOT_FOUND = "Graph file not found: {path}"
 
+# (H) Staleness report logs
+STALENESS_REPORT_FAILED = "Staleness report failed: {error}"
+
 # (H) FQN logs
 FQN_RESOLVE_FAILED = "Failed to resolve FQN for node at {path}: {error}"
 FQN_FIND_FAILED = "Failed to find function by FQN {fqn} in {path}: {error}"
