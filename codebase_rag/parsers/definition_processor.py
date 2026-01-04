@@ -7,6 +7,7 @@ from loguru import logger
 
 from .. import constants as cs
 from .. import logs as ls
+from ..services.provenance_tracker import ProvenanceTracker
 from ..types_defs import ASTNode, FunctionRegistryTrieProtocol, SimpleNameLookup
 from .class_ingest import ClassIngestMixin
 from .dependency_parser import parse_dependencies
@@ -48,6 +49,7 @@ class DefinitionProcessor(
         self.import_processor = import_processor
         self.module_qn_to_file_path = module_qn_to_file_path
         self.class_inheritance: dict[str, list[str]] = {}
+        self.provenance_tracker = ProvenanceTracker()
         self._handler = get_handler(cs.SupportedLanguage.PYTHON)
 
     def process_file(
@@ -76,6 +78,7 @@ class DefinitionProcessor(
 
             self._handler = get_handler(language)
             source_bytes = file_path.read_bytes()
+            provenance = self.provenance_tracker.record_parse(file_path, source_bytes)
             lang_queries = queries[language]
             parser = lang_queries.get(cs.KEY_PARSER)
             if not parser:
@@ -95,11 +98,22 @@ class DefinitionProcessor(
             self.module_qn_to_file_path[module_qn] = file_path
 
             self.ingestor.ensure_node_batch(
+                cs.NodeLabel.FILE,
+                {
+                    cs.KEY_PATH: relative_path_str,
+                    cs.KEY_NAME: file_path.name,
+                    cs.KEY_EXTENSION: file_path.suffix,
+                    **provenance,
+                },
+            )
+
+            self.ingestor.ensure_node_batch(
                 cs.NodeLabel.MODULE,
                 {
                     cs.KEY_QUALIFIED_NAME: module_qn,
                     cs.KEY_NAME: file_path.name,
                     cs.KEY_PATH: relative_path_str,
+                    **provenance,
                 },
             )
 

@@ -1,6 +1,7 @@
 from typing import Protocol, runtime_checkable
 
 from ..types_defs import PropertyDict, PropertyValue, ResultRow
+from .provenance_tracker import ProvenanceTracker
 
 
 @runtime_checkable
@@ -25,3 +26,6 @@ class QueryProtocol(Protocol):
     ) -> list[ResultRow]: ...
 
     def execute_write(self, query: str, params: PropertyDict | None = None) -> None: ...
+
+
+__all__ = ["IngestorProtocol", "QueryProtocol", "ProvenanceTracker"]
