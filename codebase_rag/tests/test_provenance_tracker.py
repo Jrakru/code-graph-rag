@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import inspect
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -42,23 +41,6 @@ def _parse_parsed_at(value: object) -> datetime:
     return parsed
 
 
-def _hash_algorithm(tracker: object) -> str:
-    algo = getattr(tracker, "hash_algorithm", None)
-    if isinstance(algo, str) and algo:
-        return algo
-    return "sha256"
-
-
-def _call_is_stale(tracker: object, file_path: Path, record: object) -> bool:
-    signature = inspect.signature(tracker.is_stale)
-    params = list(signature.parameters.values())
-    if len(params) == 2:
-        return tracker.is_stale(file_path)
-    if len(params) == 3:
-        return tracker.is_stale(file_path, record)
-    return tracker.is_stale(record)
-
-
 class TestProvenanceRecordParse:
     def test_record_parse_captures_timestamp_mtime_and_hash(
         self, tmp_path: Path
@@ -66,57 +48,59 @@ class TestProvenanceRecordParse:
         file_path = tmp_path / "sample.py"
         file_path.write_text("print('hello')\n", encoding="utf-8")
 
-        tracker = ProvenanceTracker(tmp_path)
+        tracker = ProvenanceTracker()
         before = datetime.now(UTC)
         record = tracker.record_parse(file_path)
         after = datetime.now(UTC)
 
-        parsed_at = _parse_parsed_at(_get_record_value(record, "parsed_at"))
+        parsed_at = _parse_parsed_at(_get_record_value(record, cs.KEY_PARSED_AT))
         assert before <= parsed_at <= after
 
-        file_mtime = _get_record_value(record, "file_mtime")
+        file_mtime = _get_record_value(record, cs.KEY_FILE_MTIME)
         assert isinstance(file_mtime, (int, float))
         assert file_mtime == pytest.approx(file_path.stat().st_mtime)
 
-        file_hash = _get_record_value(record, "file_hash")
-        expected_hash = hashlib.new(
-            _hash_algorithm(tracker), file_path.read_bytes()
-        ).hexdigest()
+        file_hash = _get_record_value(record, cs.KEY_FILE_HASH)
+        expected_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
         assert file_hash == expected_hash
 
-
-class TestProvenanceIsStale:
-    def test_is_stale_false_for_unchanged_file(self, tmp_path: Path) -> None:
+    def test_record_parse_with_source_bytes(self, tmp_path: Path) -> None:
         file_path = tmp_path / "sample.py"
-        file_path.write_text("print('hello')\n", encoding="utf-8")
+        content = b"print('hello')\n"
+        file_path.write_bytes(content)
 
-        tracker = ProvenanceTracker(tmp_path)
+        tracker = ProvenanceTracker()
+        record = tracker.record_parse(file_path, source_bytes=content)
+
+        assert cs.KEY_PARSED_AT in record
+        assert cs.KEY_FILE_MTIME in record
+        assert cs.KEY_FILE_HASH in record
+        assert record[cs.KEY_FILE_HASH] == hashlib.sha256(content).hexdigest()
+
+    def test_record_parse_returns_empty_for_missing_file(self, tmp_path: Path) -> None:
+        file_path = tmp_path / "nonexistent.py"
+
+        tracker = ProvenanceTracker()
         record = tracker.record_parse(file_path)
 
-        assert _call_is_stale(tracker, file_path, record) is False
+        assert record == {}
 
-    def test_is_stale_true_for_modified_file(self, tmp_path: Path) -> None:
+    def test_custom_chunk_size(self, tmp_path: Path) -> None:
         file_path = tmp_path / "sample.py"
-        file_path.write_text("print('hello')\n", encoding="utf-8")
+        file_path.write_text("x" * 100, encoding="utf-8")
 
-        tracker = ProvenanceTracker(tmp_path)
+        tracker = ProvenanceTracker(chunk_size=10)
         record = tracker.record_parse(file_path)
 
-        file_path.write_text("print('changed')\n", encoding="utf-8")
-        file_path.touch()
+        assert cs.KEY_FILE_HASH in record
+        assert record[cs.KEY_FILE_HASH] == hashlib.sha256(b"x" * 100).hexdigest()
 
-        assert _call_is_stale(tracker, file_path, record) is True
+    def test_invalid_chunk_size_raises(self) -> None:
+        with pytest.raises(ValueError, match="chunk_size must be positive"):
+            ProvenanceTracker(chunk_size=0)
 
-    def test_is_stale_true_for_missing_file(self, tmp_path: Path) -> None:
-        file_path = tmp_path / "sample.py"
-        file_path.write_text("print('hello')\n", encoding="utf-8")
-
-        tracker = ProvenanceTracker(tmp_path)
-        record = tracker.record_parse(file_path)
-
-        file_path.unlink()
-
-        assert _call_is_stale(tracker, file_path, record) is True
+        with pytest.raises(ValueError, match="chunk_size must be positive"):
+            ProvenanceTracker(chunk_size=-1)
 
 
 class TestProvenanceIntegration:
@@ -143,17 +127,16 @@ class TestProvenanceIntegration:
         assert matching
 
         file_props = matching[0].args[1]
-        assert "parsed_at" in file_props
-        assert "file_mtime" in file_props
-        assert "file_hash" in file_props
+        assert cs.KEY_PARSED_AT in file_props
+        assert cs.KEY_FILE_MTIME in file_props
+        assert cs.KEY_FILE_HASH in file_props
 
-        parsed_at = _parse_parsed_at(file_props["parsed_at"])
+        parsed_at = _parse_parsed_at(file_props[cs.KEY_PARSED_AT])
         assert isinstance(parsed_at, datetime)
-        assert file_props["file_mtime"] == pytest.approx(target_file.stat().st_mtime)
+        assert file_props[cs.KEY_FILE_MTIME] == pytest.approx(
+            target_file.stat().st_mtime
+        )
         assert (
-            file_props["file_hash"]
-            == hashlib.new(
-                _hash_algorithm(ProvenanceTracker(project_path)),
-                target_file.read_bytes(),
-            ).hexdigest()
+            file_props[cs.KEY_FILE_HASH]
+            == hashlib.sha256(target_file.read_bytes()).hexdigest()
         )
