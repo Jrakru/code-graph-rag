@@ -13,14 +13,16 @@ from unittest.mock import MagicMock
 import pytest
 from loguru import logger
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+
+from codebase_rag.constants import SupportedLanguage
 from codebase_rag.graph_updater import GraphUpdater
+from codebase_rag.language_spec import get_language_for_extension
 from codebase_rag.parser_loader import load_parsers
 from codebase_rag.services.graph_service import MemgraphIngestor
 
 if TYPE_CHECKING:
     import mgclient  # ty: ignore[unresolved-import]
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 
 class NodeProtocol(Protocol):
@@ -115,6 +117,8 @@ def create_and_run_updater(
     parsers, queries = load_parsers()
     if skip_if_missing and skip_if_missing not in parsers:
         pytest.skip(f"{skip_if_missing} parser not available")
+    if skip_if_missing is None:
+        _skip_if_missing_parser(repo_path, parsers)
     updater = GraphUpdater(
         ingestor=mock_ingestor,
         repo_path=repo_path,
@@ -132,6 +136,21 @@ def get_relationships(mock_ingestor: MagicMock, rel_type: str) -> list:
         for c in mock_ingestor.ensure_relationship_batch.call_args_list
         if c.args[1] == rel_type
     ]
+
+
+def _skip_if_missing_parser(
+    repo_path: Path, parsers: dict[SupportedLanguage, object]
+) -> None:
+    missing: set[str] = set()
+    for path in repo_path.rglob("*"):
+        if not path.is_file():
+            continue
+        language = get_language_for_extension(path.suffix)
+        if language and language not in parsers:
+            missing.add(language.value)
+    if missing:
+        missing_list = ", ".join(sorted(missing))
+        pytest.skip(f"Missing parser(s) for: {missing_list}")
 
 
 def get_nodes(mock_ingestor: MagicMock, node_type: str) -> list:
