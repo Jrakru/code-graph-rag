@@ -1,7 +1,10 @@
 from typing import Protocol, runtime_checkable
 
 from ..types_defs import PropertyDict, PropertyValue, ResultRow
+from .confidence_scorer import ConfidenceScorer
+from .file_classifier import FileClassifier
 from .provenance_tracker import ProvenanceTracker
+from .validation_engine import ValidationEngine
 
 
 @runtime_checkable
@@ -28,4 +31,11 @@ class QueryProtocol(Protocol):
     def execute_write(self, query: str, params: PropertyDict | None = None) -> None: ...
 
 
-__all__ = ["IngestorProtocol", "QueryProtocol", "ProvenanceTracker"]
+__all__ = [
+    "ConfidenceScorer",
+    "FileClassifier",
+    "IngestorProtocol",
+    "ProvenanceTracker",
+    "QueryProtocol",
+    "ValidationEngine",
+]
