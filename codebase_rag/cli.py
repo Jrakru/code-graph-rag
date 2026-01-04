@@ -20,6 +20,7 @@ from .main import (
 )
 from .parser_loader import load_parsers
 from .services.protobuf_service import ProtobufFileIngestor
+from .services.staleness_reporter import ReportFormat, StalenessReporter
 from .tools.language import cli as language_cli
 
 app = typer.Typer(
@@ -203,6 +204,40 @@ def export(
             style(cs.CLI_ERR_EXPORT_FAILED.format(error=e), cs.Color.RED)
         )
         logger.exception(ls.EXPORT_ERROR.format(error=e))
+        raise typer.Exit(1) from e
+
+
+@app.command(name=ch.CLICommandName.STALENESS_REPORT, help=ch.CMD_STALENESS_REPORT)
+def staleness_report(
+    repo_path: str | None = typer.Option(
+        None, "--repo-path", help=ch.HELP_REPO_PATH_RETRIEVAL
+    ),
+    output_format: ReportFormat = typer.Option(
+        ReportFormat.MARKDOWN, "--format", help=ch.HELP_STALENESS_FORMAT
+    ),
+    batch_size: int | None = typer.Option(
+        None,
+        "--batch-size",
+        min=1,
+        help=ch.HELP_BATCH_SIZE,
+    ),
+) -> None:
+    target_repo_path = repo_path or settings.TARGET_REPO_PATH
+
+    app_context.console.print(style(cs.CLI_MSG_STALENESS_REPORT, cs.Color.CYAN))
+    effective_batch_size = settings.resolve_batch_size(batch_size)
+
+    try:
+        with connect_memgraph(effective_batch_size) as ingestor:
+            reporter = StalenessReporter(ingestor, target_repo_path)
+            report = reporter.generate_report()
+            output = reporter.render(report, output_format)
+            app_context.console.print(output)
+    except Exception as e:
+        app_context.console.print(
+            style(cs.CLI_ERR_STALENESS_REPORT.format(error=e), cs.Color.RED)
+        )
+        logger.exception(ls.STALENESS_REPORT_FAILED.format(error=e))
         raise typer.Exit(1) from e
 
 

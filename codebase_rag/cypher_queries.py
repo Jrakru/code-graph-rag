@@ -58,6 +58,12 @@ WHERE f.path IN $paths
 RETURN f.path AS path, f.file_hash AS file_hash, f.parsed_at AS parsed_at
 """
 
+CYPHER_FETCH_FILE_SNAPSHOTS = """
+MATCH (f:File)
+RETURN f.path AS path, f.file_hash AS file_hash, f.parsed_at AS parsed_at
+ORDER BY f.path
+"""
+
 
 def wrap_with_unwind(query: str) -> str:
     return f"UNWIND $batch AS row\n{query}"

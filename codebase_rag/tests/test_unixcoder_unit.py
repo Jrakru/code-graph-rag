@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-import torch
+import pytest
 
-from codebase_rag.unixcoder import Beam
+torch = pytest.importorskip("torch")
+
+from codebase_rag.unixcoder import Beam  # noqa: E402
 
 
 class TestBeamInit:

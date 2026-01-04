@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from .. import constants as cs
 from ..cypher_queries import CYPHER_FETCH_FILE_HASHES
@@ -45,6 +45,7 @@ class ProvenanceTracker:
             items = list(files.items())
         else:
             items = list(files)
+        items = cast(list[tuple[Path | str, str | None]], items)
 
         if not items:
             return {}

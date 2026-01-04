@@ -7,6 +7,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 from codebase_rag.graph_updater import GraphUpdater
 from codebase_rag.parser_loader import load_parsers
 
@@ -31,7 +33,8 @@ function main() {
         test_file.write_text(test_code)
 
         parsers, queries = load_parsers()
-        assert "javascript" in parsers, "JavaScript parser not available"
+        if "javascript" not in parsers:
+            pytest.skip("JavaScript parser not available")
 
         mock_ingestor = MagicMock()
         updater = GraphUpdater(

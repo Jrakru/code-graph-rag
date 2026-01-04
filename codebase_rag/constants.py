@@ -211,6 +211,7 @@ CLI_ERR_INDEXING = "An error occurred during indexing: {error}"
 CLI_ERR_EXPORT_FAILED = "Failed to export graph: {error}"
 CLI_ERR_LOAD_GRAPH = "Failed to load graph: {error}"
 CLI_ERR_MCP_SERVER = "MCP Server Error: {error}"
+CLI_ERR_STALENESS_REPORT = "Failed to generate staleness report: {error}"
 
 CLI_MSG_UPDATING_GRAPH = "Updating knowledge graph for: {path}"
 CLI_MSG_CLEANING_DB = "Cleaning database..."
@@ -224,6 +225,7 @@ CLI_MSG_CONNECTING_MEMGRAPH = "Connecting to Memgraph to export graph..."
 CLI_MSG_EXPORTING_DATA = "Exporting graph data..."
 CLI_MSG_OPTIMIZATION_TERMINATED = "\nOptimization session terminated by user."
 CLI_MSG_MCP_TERMINATED = "\nMCP server terminated by user."
+CLI_MSG_STALENESS_REPORT = "Generating staleness report..."
 CLI_MSG_HINT_TARGET_REPO = (
     "\nHint: Make sure TARGET_REPO_PATH environment variable is set."
 )

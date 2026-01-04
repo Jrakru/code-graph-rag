@@ -9,6 +9,7 @@ class CLICommandName(StrEnum):
     MCP_SERVER = "mcp-server"
     GRAPH_LOADER = "graph-loader"
     LANGUAGE = "language"
+    STALENESS_REPORT = "staleness-report"
 
 
 APP_DESCRIPTION = (
@@ -24,6 +25,7 @@ CMD_OPTIMIZE = "AI-guided codebase optimization session"
 CMD_MCP_SERVER = "Start the MCP server for Claude Code integration"
 CMD_GRAPH_LOADER = "Load and display summary of exported graph JSON"
 CMD_LANGUAGE = "Manage language grammars (add, remove, list)"
+CMD_STALENESS_REPORT = "Generate a staleness report for the indexed codebase"
 
 CMD_LANGUAGE_GROUP = "CLI for managing language grammars"
 CMD_LANGUAGE_ADD = "Add a new language grammar to the project."
@@ -69,6 +71,7 @@ HELP_LANGUAGE_ARG = (
 HELP_REFERENCE_DOC = "Path to reference document/book for optimization guidance"
 HELP_GRAPH_FILE = "Path to the exported graph JSON file"
 HELP_EXPORTED_GRAPH_FILE = "Path to the exported_graph.json file."
+HELP_STALENESS_FORMAT = "Output format for the staleness report (json or markdown)"
 
 HELP_GRAMMAR_URL = (
     "URL to the tree-sitter grammar repository. If not provided, "
@@ -84,4 +87,5 @@ CLI_COMMANDS: dict[CLICommandName, str] = {
     CLICommandName.MCP_SERVER: CMD_MCP_SERVER,
     CLICommandName.GRAPH_LOADER: CMD_GRAPH_LOADER,
     CLICommandName.LANGUAGE: CMD_LANGUAGE,
+    CLICommandName.STALENESS_REPORT: CMD_STALENESS_REPORT,
 }
