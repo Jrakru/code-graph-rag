@@ -6,6 +6,7 @@ class CLICommandName(StrEnum):
     INDEX = "index"
     EXPORT = "export"
     OPTIMIZE = "optimize"
+    CHECK_STALENESS = "check-staleness"
     MCP_SERVER = "mcp-server"
     GRAPH_LOADER = "graph-loader"
     LANGUAGE = "language"
@@ -21,6 +22,7 @@ CMD_START = "Start interactive chat session with your codebase"
 CMD_INDEX = "Index codebase to protobuf files for offline use"
 CMD_EXPORT = "Export knowledge graph from Memgraph to JSON file"
 CMD_OPTIMIZE = "AI-guided codebase optimization session"
+CMD_CHECK_STALENESS = "Check repository files against graph hashes for staleness"
 CMD_MCP_SERVER = "Start the MCP server for Claude Code integration"
 CMD_GRAPH_LOADER = "Load and display summary of exported graph JSON"
 CMD_LANGUAGE = "Manage language grammars (add, remove, list)"
@@ -48,6 +50,13 @@ HELP_REPO_PATH_RETRIEVAL = "Path to the target repository for code retrieval"
 HELP_REPO_PATH_INDEX = "Path to the target repository to index."
 HELP_REPO_PATH_OPTIMIZE = "Path to the repository to optimize"
 HELP_REPO_PATH_WATCH = "Path to the repository to watch."
+HELP_CHECK_STALENESS = "Warn if the knowledge graph is stale before starting"
+HELP_STALENESS_EXTENSION = (
+    "Only check files with this extension (e.g., .py). Can be provided multiple times."
+)
+HELP_STALENESS_PATH_PATTERN = (
+    "Regex pattern to match relative file paths for staleness checks."
+)
 
 HELP_DEBOUNCE = "Debounce delay in seconds. Set to 0 to disable debouncing."
 HELP_MAX_WAIT = (
@@ -81,6 +90,7 @@ CLI_COMMANDS: dict[CLICommandName, str] = {
     CLICommandName.INDEX: CMD_INDEX,
     CLICommandName.EXPORT: CMD_EXPORT,
     CLICommandName.OPTIMIZE: CMD_OPTIMIZE,
+    CLICommandName.CHECK_STALENESS: CMD_CHECK_STALENESS,
     CLICommandName.MCP_SERVER: CMD_MCP_SERVER,
     CLICommandName.GRAPH_LOADER: CMD_GRAPH_LOADER,
     CLICommandName.LANGUAGE: CMD_LANGUAGE,

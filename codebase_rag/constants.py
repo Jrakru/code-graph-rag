@@ -211,6 +211,7 @@ CLI_ERR_INDEXING = "An error occurred during indexing: {error}"
 CLI_ERR_EXPORT_FAILED = "Failed to export graph: {error}"
 CLI_ERR_LOAD_GRAPH = "Failed to load graph: {error}"
 CLI_ERR_MCP_SERVER = "MCP Server Error: {error}"
+CLI_ERR_STALENESS = "Failed to check staleness: {error}"
 
 CLI_MSG_UPDATING_GRAPH = "Updating knowledge graph for: {path}"
 CLI_MSG_CLEANING_DB = "Cleaning database..."
@@ -228,6 +229,15 @@ CLI_MSG_HINT_TARGET_REPO = (
     "\nHint: Make sure TARGET_REPO_PATH environment variable is set."
 )
 CLI_MSG_GRAPH_SUMMARY = "Graph Summary:"
+CLI_MSG_STALENESS_SCAN = "Scanning repository for stale files: {path}"
+CLI_MSG_STALENESS_NONE = "No stale files detected."
+CLI_MSG_STALENESS_NO_FILES = "No files matched the staleness filters."
+CLI_MSG_STALENESS_LIST_HEADER = "Stale files:"
+CLI_MSG_STALENESS_STATS = (
+    "Staleness summary: {stale}/{total} files stale ({percent:.1f}%)."
+)
+CLI_WARN_STALE_FOUND = "Warning: Detected {count} stale file(s)."
+CLI_WARN_STALE_HINT = "Run 'cgr check-staleness' for details."
 
 UI_DIFF_FILE_HEADER = "[bold cyan]File: {path}[/bold cyan]"
 UI_NEW_FILE_HEADER = "[bold cyan]New file: {path}[/bold cyan]"

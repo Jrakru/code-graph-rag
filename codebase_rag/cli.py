@@ -20,6 +20,8 @@ from .main import (
 )
 from .parser_loader import load_parsers
 from .services.protobuf_service import ProtobufFileIngestor
+from .services.provenance_tracker import ProvenanceTracker
+from .services.staleness_checker import StalenessChecker, StalenessReport
 from .tools.language import cli as language_cli
 
 app = typer.Typer(
@@ -28,6 +30,47 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+
+
+def _run_staleness_check(
+    repo_path: Path,
+    batch_size: int,
+    extensions: list[str] | None = None,
+    path_pattern: str | None = None,
+) -> StalenessReport:
+    with connect_memgraph(batch_size) as ingestor:
+        tracker = ProvenanceTracker(ingestor, repo_path)
+        checker = StalenessChecker(tracker, repo_path)
+        return checker.scan(extensions=extensions, path_pattern=path_pattern)
+
+
+def _print_staleness_report(report: StalenessReport, show_paths: bool = True) -> None:
+    if report.total_files == 0:
+        app_context.console.print(style(cs.CLI_MSG_STALENESS_NO_FILES, cs.Color.YELLOW))
+    elif report.stale_count == 0:
+        app_context.console.print(style(cs.CLI_MSG_STALENESS_NONE, cs.Color.GREEN))
+    else:
+        app_context.console.print(
+            style(
+                cs.CLI_WARN_STALE_FOUND.format(count=report.stale_count),
+                cs.Color.YELLOW,
+            )
+        )
+        if show_paths:
+            app_context.console.print(cs.CLI_MSG_STALENESS_LIST_HEADER)
+            for path in report.stale_paths:
+                app_context.console.print(f"  {path}")
+
+    app_context.console.print(
+        style(
+            cs.CLI_MSG_STALENESS_STATS.format(
+                stale=report.stale_count,
+                total=report.total_files,
+                percent=report.stale_percentage,
+            ),
+            cs.Color.CYAN,
+        )
+    )
 
 
 @app.command(help=ch.CMD_START)
@@ -72,6 +115,11 @@ def start(
         min=1,
         help=ch.HELP_BATCH_SIZE,
     ),
+    check_staleness: bool = typer.Option(
+        False,
+        "--check-staleness",
+        help=ch.HELP_CHECK_STALENESS,
+    ),
 ) -> None:
     app_context.session.confirm_edits = not no_confirm
 
@@ -86,6 +134,27 @@ def start(
     update_model_settings(orchestrator, cypher)
 
     effective_batch_size = settings.resolve_batch_size(batch_size)
+
+    if check_staleness and not update_graph:
+        try:
+            report = _run_staleness_check(
+                Path(target_repo_path),
+                effective_batch_size,
+            )
+            if report.stale_count > 0:
+                _print_staleness_report(report, show_paths=False)
+                app_context.console.print(
+                    style(cs.CLI_WARN_STALE_HINT, cs.Color.YELLOW)
+                )
+        except ValueError as e:
+            app_context.console.print(
+                style(cs.CLI_ERR_STALENESS.format(error=e), cs.Color.RED)
+            )
+        except Exception as e:
+            app_context.console.print(
+                style(cs.CLI_ERR_STALENESS.format(error=e), cs.Color.RED)
+            )
+            logger.exception(ls.STALENESS_CHECK_FAILED.format(error=e))
 
     if update_graph:
         repo_to_update = Path(target_repo_path)
@@ -169,6 +238,62 @@ def index(
         )
         logger.exception(ls.INDEXING_FAILED)
         raise typer.Exit(1) from e
+
+
+@app.command(name=ch.CLICommandName.CHECK_STALENESS, help=ch.CMD_CHECK_STALENESS)
+def check_staleness(
+    repo_path: str | None = typer.Option(
+        None, "--repo-path", help=ch.HELP_REPO_PATH_RETRIEVAL
+    ),
+    extension: list[str] | None = typer.Option(
+        None,
+        "--extension",
+        help=ch.HELP_STALENESS_EXTENSION,
+    ),
+    path_pattern: str | None = typer.Option(
+        None,
+        "--path-pattern",
+        help=ch.HELP_STALENESS_PATH_PATTERN,
+    ),
+    batch_size: int | None = typer.Option(
+        None,
+        "--batch-size",
+        min=1,
+        help=ch.HELP_BATCH_SIZE,
+    ),
+) -> None:
+    target_repo_path = repo_path or settings.TARGET_REPO_PATH
+    repo_root = Path(target_repo_path)
+
+    if not repo_root.exists() or not repo_root.is_dir():
+        app_context.console.print(
+            style(
+                cs.CLI_ERR_STALENESS.format(error="Repository path not found"),
+                cs.Color.RED,
+            )
+        )
+        raise typer.Exit(1)
+
+    app_context.console.print(
+        style(cs.CLI_MSG_STALENESS_SCAN.format(path=repo_root), cs.Color.CYAN)
+    )
+
+    effective_batch_size = settings.resolve_batch_size(batch_size)
+
+    try:
+        report = _run_staleness_check(
+            repo_root, effective_batch_size, extension, path_pattern
+        )
+    except ValueError as e:
+        raise typer.BadParameter(str(e)) from e
+    except Exception as e:
+        app_context.console.print(
+            style(cs.CLI_ERR_STALENESS.format(error=e), cs.Color.RED)
+        )
+        logger.exception(ls.STALENESS_CHECK_FAILED.format(error=e))
+        raise typer.Exit(1) from e
+
+    _print_staleness_report(report, show_paths=True)
 
 
 @app.command(help=ch.CMD_EXPORT)
