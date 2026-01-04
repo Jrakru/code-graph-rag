@@ -270,6 +270,7 @@ class GraphUpdater:
         logger.info(ls.FOUND_FUNCTIONS.format(count=len(self.function_registry)))
         logger.info(ls.PASS_3_CALLS)
         self._process_function_calls()
+        self._run_validation()
 
         self.factory.definition_processor.process_all_method_overrides()
 
@@ -346,6 +347,34 @@ class GraphUpdater:
         for file_path, (root_node, language) in ast_cache_items:
             self.factory.call_processor.process_calls_in_file(
                 file_path, root_node, language, self.queries
+            )
+
+    def _run_validation(self) -> None:
+        validation_engine = getattr(self.ingestor, "validation_engine", None)
+        if validation_engine is None:
+            logger.debug(ls.VALIDATION_SKIPPED)
+            return
+
+        validate_relationships = getattr(self.ingestor, "validate_relationships", None)
+        if callable(validate_relationships):
+            logger.info(ls.VALIDATION_START)
+            validate_relationships()
+
+        orphans = validation_engine.report_orphans()
+        if not orphans:
+            logger.info(ls.VALIDATION_NO_ORPHANS)
+            return
+
+        logger.warning(ls.VALIDATION_FOUND_ORPHANS.format(count=len(orphans)))
+        for index, orphan in enumerate(orphans[:3], start=1):
+            logger.warning(
+                ls.VALIDATION_ORPHAN_SAMPLE.format(
+                    index=index,
+                    from_label=orphan.from_label,
+                    from_val=orphan.from_val,
+                    to_label=orphan.to_label,
+                    to_val=orphan.to_val,
+                )
             )
 
     def _generate_semantic_embeddings(self) -> None:
