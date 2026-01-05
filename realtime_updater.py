@@ -32,6 +32,7 @@ from codebase_rag.language_spec import get_language_spec
 from codebase_rag.parser_loader import load_parsers
 from codebase_rag.services import QueryProtocol
 from codebase_rag.services.graph_service import MemgraphIngestor
+from codebase_rag.utils.ignore import build_ignore_spec
 
 
 class CodeChangeEventHandler(FileSystemEventHandler):
@@ -54,7 +55,7 @@ class CodeChangeEventHandler(FileSystemEventHandler):
         max_wait_seconds: float = DEFAULT_MAX_WAIT_SECONDS,
     ):
         self.updater = updater
-        self.ignore_patterns = IGNORE_PATTERNS
+        self.ignore_spec = build_ignore_spec(updater.repo_path, IGNORE_PATTERNS)
         self.ignore_suffixes = IGNORE_SUFFIXES
 
         # (H) Debounce configuration
@@ -81,7 +82,7 @@ class CodeChangeEventHandler(FileSystemEventHandler):
         path = Path(path_str)
         if any(path.name.endswith(suffix) for suffix in self.ignore_suffixes):
             return False
-        return all(part not in self.ignore_patterns for part in path.parts)
+        return not self.ignore_spec.matches(path, self.updater.repo_path)
 
     def dispatch(self, event: FileSystemEvent) -> None:
         # (H) ┌─────────────────────────────────────────────────────────────────────┐

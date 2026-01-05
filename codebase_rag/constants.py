@@ -704,6 +704,7 @@ TS_LOCALS_PATTERN = """
 """
 
 # (H) File/directory ignore patterns
+GRAPHRAG_IGNORE_FILENAME = ".graphragignore"
 IGNORE_PATTERNS = frozenset(
     {
         # Version control

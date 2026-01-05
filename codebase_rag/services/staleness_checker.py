@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import constants as cs
+from ..utils.ignore import build_ignore_spec
 from .provenance_tracker import ProvenanceTracker
 
 
@@ -104,7 +105,8 @@ class StalenessChecker:
     ) -> None:
         self.tracker = tracker
         self.repo_root = repo_root.resolve()
-        self.ignore_patterns = set(ignore_patterns or cs.IGNORE_PATTERNS)
+        base_patterns = ignore_patterns or cs.IGNORE_PATTERNS
+        self.ignore_spec = build_ignore_spec(self.repo_root, base_patterns)
         self.ignore_suffixes = set(ignore_suffixes or cs.IGNORE_SUFFIXES)
 
     def scan(
@@ -154,10 +156,12 @@ class StalenessChecker:
             rel_root = root_path.relative_to(self.repo_root)
 
             dirs[:] = [
-                dirname for dirname in dirs if dirname not in self.ignore_patterns
+                dirname
+                for dirname in dirs
+                if not self.ignore_spec.matches(root_path / dirname, self.repo_root)
             ]
 
-            if any(part in self.ignore_patterns for part in rel_root.parts):
+            if self.ignore_spec.matches(root_path, self.repo_root):
                 continue
 
             for filename in files:
@@ -165,6 +169,8 @@ class StalenessChecker:
                     continue
 
                 path = root_path / filename
+                if self.ignore_spec.matches(path, self.repo_root):
+                    continue
                 rel_path = path.relative_to(self.repo_root)
                 rel_str = rel_path.as_posix()
 

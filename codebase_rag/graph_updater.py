@@ -24,6 +24,7 @@ from .types_defs import (
 )
 from .utils.dependencies import has_semantic_dependencies
 from .utils.fqn_resolver import find_function_source_by_fqn
+from .utils.ignore import build_ignore_spec
 from .utils.source_extraction import extract_source_with_fallback
 
 
@@ -237,7 +238,7 @@ class GraphUpdater:
             simple_name_lookup=self.simple_name_lookup
         )
         self.ast_cache = BoundedASTCache()
-        self.ignore_dirs = cs.IGNORE_PATTERNS
+        self.ignore_spec = build_ignore_spec(self.repo_path, cs.IGNORE_PATTERNS)
 
         self.factory = ProcessorFactory(
             ingestor=self.ingestor,
@@ -312,10 +313,7 @@ class GraphUpdater:
 
     def _process_files(self) -> None:
         def should_skip_path(path: Path) -> bool:
-            return any(
-                part in self.ignore_dirs
-                for part in path.relative_to(self.repo_path).parts
-            )
+            return self.ignore_spec.matches(path, self.repo_path)
 
         for filepath in self.repo_path.rglob("*"):
             if filepath.is_file() and not should_skip_path(filepath):

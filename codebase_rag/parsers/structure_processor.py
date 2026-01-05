@@ -6,6 +6,7 @@ from .. import constants as cs
 from .. import logs
 from ..services import IngestorProtocol
 from ..types_defs import LanguageQueries, NodeIdentifier
+from ..utils.ignore import build_ignore_spec
 
 
 class StructureProcessor:
@@ -21,7 +22,7 @@ class StructureProcessor:
         self.project_name = project_name
         self.queries = queries
         self.structural_elements: dict[Path, str | None] = {}
-        self.ignore_dirs = cs.IGNORE_PATTERNS
+        self.ignore_spec = build_ignore_spec(self.repo_path, cs.IGNORE_PATTERNS)
 
     def _get_parent_identifier(
         self, parent_rel_path: Path, parent_container_qn: str | None
@@ -35,10 +36,7 @@ class StructureProcessor:
     def identify_structure(self) -> None:
         directories = {self.repo_path}
         for path in self.repo_path.rglob(cs.GLOB_ALL):
-            if path.is_dir() and not any(
-                part in self.ignore_dirs
-                for part in path.relative_to(self.repo_path).parts
-            ):
+            if path.is_dir() and not self.ignore_spec.matches(path, self.repo_path):
                 directories.add(path)
 
         for root in sorted(directories):

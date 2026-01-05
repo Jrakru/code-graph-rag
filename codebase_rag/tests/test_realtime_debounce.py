@@ -118,6 +118,9 @@ class TestCodeChangeEventHandlerDebounce:
         """Test that _is_relevant correctly filters out ignored paths."""
         from realtime_updater import CodeChangeEventHandler
 
+        (tmp_path / ".graphragignore").write_text(
+            "generated\nbundles/*.js\n", encoding="utf-8"
+        )
         handler = CodeChangeEventHandler(mock_updater)
 
         # Should be ignored (directories in ignore patterns)
@@ -129,6 +132,9 @@ class TestCodeChangeEventHandlerDebounce:
         assert handler._is_relevant(str(tmp_path / "main.py")) is True
         assert handler._is_relevant(str(tmp_path / "src" / "lib.rs")) is True
         assert handler._is_relevant(str(tmp_path / "app.js")) is True
+        assert handler._is_relevant(str(tmp_path / "generated" / "out.py")) is False
+        assert handler._is_relevant(str(tmp_path / "bundles" / "bundle.js")) is False
+        assert handler._is_relevant(str(tmp_path / "bundles" / "bundle.ts")) is True
 
     def test_dispatch_ignores_directories(
         self, mock_updater: MagicMock, mock_ingestor: MockQueryIngestor, tmp_path: Path

@@ -197,8 +197,10 @@ class TestIdentifyStructure:
     def test_ignored_directories_are_skipped(
         self,
         temp_repo: Path,
-        processor: StructureProcessor,
         mock_ingestor: MagicMock,
+        mock_language_queries: dict[
+            SupportedLanguage, dict[str, MagicMock | LanguageSpec | None]
+        ],
     ) -> None:
         git_dir = temp_repo / ".git"
         git_dir.mkdir()
@@ -209,9 +211,19 @@ class TestIdentifyStructure:
         venv_dir = temp_repo / "venv"
         venv_dir.mkdir()
 
+        (temp_repo / ".graphragignore").write_text("custom_ignore\n", encoding="utf-8")
+        custom_dir = temp_repo / "custom_ignore"
+        custom_dir.mkdir()
+
         valid_dir = temp_repo / "valid"
         valid_dir.mkdir()
 
+        processor = StructureProcessor(
+            ingestor=mock_ingestor,
+            repo_path=temp_repo,
+            project_name="test_project",
+            queries=mock_language_queries,
+        )
         processor.identify_structure()
 
         folder_calls = [
@@ -225,6 +237,7 @@ class TestIdentifyStructure:
         assert ".git" not in folder_paths
         assert "__pycache__" not in folder_paths
         assert "venv" not in folder_paths
+        assert "custom_ignore" not in folder_paths
 
     def test_nested_ignored_directory_skipped(
         self,
