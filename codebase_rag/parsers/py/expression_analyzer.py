@@ -288,6 +288,10 @@ class PythonExpressionAnalyzerMixin(_ExprBase):
     def _resolve_class_method(
         self, class_name: str, method_name: str, module_qn: str
     ) -> str | None:
+        if cs.SEPARATOR_DOT in class_name:
+            if result := self._try_resolve_method(class_name, method_name):
+                return result
+
         local_class_qn = f"{module_qn}{cs.SEPARATOR_DOT}{class_name}"
         if result := self._try_resolve_method(local_class_qn, method_name):
             return result

@@ -81,6 +81,7 @@ class ProcessorFactory:
                 simple_name_lookup=self.simple_name_lookup,
                 import_processor=self.import_processor,
                 module_qn_to_file_path=self.module_qn_to_file_path,
+                file_classifier=self.file_classifier,
             )
         return self._definition_processor
 

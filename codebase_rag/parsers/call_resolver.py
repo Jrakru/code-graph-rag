@@ -888,7 +888,7 @@ class CallResolver:
         module_qn: str,
         local_var_types: dict[str, str] | None = None,
     ) -> tuple[str, str] | None:
-        match = re.search(r"\.([^.()]+)$", call_name)
+        match = re.search(cs.REGEX_FINAL_METHOD_CAPTURE, call_name)
         if not match:
             return None
 
@@ -941,7 +941,7 @@ class CallResolver:
         module_qn: str,
         local_var_types: dict[str, str] | None = None,
     ) -> ResolutionResult | None:
-        match = re.search(r"\\.([^.()]+)$", call_name)
+        match = re.search(cs.REGEX_FINAL_METHOD_CAPTURE, call_name)
         if not match:
             return None
 

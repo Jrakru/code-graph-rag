@@ -7,8 +7,14 @@ from loguru import logger
 
 from .. import constants as cs
 from .. import logs as ls
+from ..protocols import FileClassifierProtocol, SourceType
 from ..services.provenance_tracker import ProvenanceTracker
-from ..types_defs import ASTNode, FunctionRegistryTrieProtocol, SimpleNameLookup
+from ..types_defs import (
+    ASTNode,
+    FunctionRegistryTrieProtocol,
+    PropertyDict,
+    SimpleNameLookup,
+)
 from .class_ingest import ClassIngestMixin
 from .dependency_parser import parse_dependencies
 from .function_ingest import FunctionIngestMixin
@@ -39,6 +45,7 @@ class DefinitionProcessor(
         simple_name_lookup: SimpleNameLookup,
         import_processor: ImportProcessor,
         module_qn_to_file_path: dict[str, Path],
+        file_classifier: FileClassifierProtocol | None = None,
     ):
         super().__init__()
         self.ingestor = ingestor
@@ -48,6 +55,7 @@ class DefinitionProcessor(
         self.simple_name_lookup = simple_name_lookup
         self.import_processor = import_processor
         self.module_qn_to_file_path = module_qn_to_file_path
+        self.file_classifier = file_classifier
         self.class_inheritance: dict[str, list[str]] = {}
         self.provenance_tracker = ProvenanceTracker()
         self._handler = get_handler(cs.SupportedLanguage.PYTHON)
@@ -66,6 +74,10 @@ class DefinitionProcessor(
         logger.info(
             ls.DEF_PARSING_AST.format(language=language, path=relative_path_str)
         )
+
+        source_type = SourceType.CODE.value
+        if self.file_classifier is not None:
+            source_type = self.file_classifier.classify(file_path).value
 
         try:
             if language not in queries:
@@ -103,6 +115,7 @@ class DefinitionProcessor(
                     cs.KEY_PATH: relative_path_str,
                     cs.KEY_NAME: file_path.name,
                     cs.KEY_EXTENSION: file_path.suffix,
+                    cs.KEY_SOURCE_TYPE: source_type,
                     **provenance,
                 },
             )
@@ -174,9 +187,11 @@ class DefinitionProcessor(
             cs.NodeLabel.EXTERNAL_PACKAGE, {cs.KEY_NAME: dep_name}
         )
 
-        rel_properties = {cs.KEY_VERSION_SPEC: dep_spec} if dep_spec else {}
+        rel_properties: PropertyDict = (
+            {cs.KEY_VERSION_SPEC: dep_spec} if dep_spec else {}
+        )
         if properties:
-            rel_properties |= properties
+            rel_properties.update(properties)
 
         self.ingestor.ensure_relationship_batch(
             (cs.NodeLabel.PROJECT, cs.KEY_NAME, self.project_name),

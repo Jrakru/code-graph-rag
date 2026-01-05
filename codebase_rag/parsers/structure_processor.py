@@ -6,6 +6,7 @@ from .. import constants as cs
 from .. import logs
 from ..protocols import FileClassifierProtocol
 from ..services import IngestorProtocol
+from ..services.provenance_tracker import ProvenanceTracker
 from ..types_defs import LanguageQueries, NodeIdentifier
 from ..utils.ignore import build_ignore_spec
 
@@ -26,6 +27,7 @@ class StructureProcessor:
         self.structural_elements: dict[Path, str | None] = {}
         self.ignore_spec = build_ignore_spec(self.repo_path, cs.IGNORE_PATTERNS)
         self.file_classifier = file_classifier
+        self.provenance_tracker = ProvenanceTracker()
 
     def _get_parent_identifier(
         self, parent_rel_path: Path, parent_container_qn: str | None
@@ -115,6 +117,8 @@ class StructureProcessor:
         if self.file_classifier is not None:
             source_type = self.file_classifier.classify(file_path).value
 
+        provenance = self.provenance_tracker.record_parse(file_path)
+
         self.ingestor.ensure_node_batch(
             cs.NodeLabel.FILE,
             {
@@ -122,6 +126,7 @@ class StructureProcessor:
                 cs.KEY_NAME: file_name,
                 cs.KEY_EXTENSION: file_path.suffix,
                 cs.KEY_SOURCE_TYPE: source_type,
+                **provenance,
             },
         )
 
