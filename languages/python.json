@@ -1,0 +1,96 @@
+{
+    "name": "python",
+    "display_name": "Python",
+    "package_managers": [
+        {
+            "name": "uv",
+            "detect": ["uv.lock"],
+            "install": "uv sync",
+            "check": "uv pip list",
+            "run_prefix": "uv run"
+        },
+        {
+            "name": "poetry",
+            "detect": ["poetry.lock"],
+            "install": "poetry install",
+            "check": "poetry check",
+            "run_prefix": "poetry run"
+        },
+        {
+            "name": "pip",
+            "detect": ["requirements.txt", "setup.py", "setup.cfg"],
+            "install": "pip install -e . || pip install -r requirements.txt",
+            "check": "pip list",
+            "run_prefix": ""
+        }
+    ],
+    "package_manager": {
+        "name": "uv",
+        "install": "uv sync",
+        "check": "uv pip list",
+        "lockfile": "uv.lock",
+        "run_prefix": "uv run"
+    },
+    "tools": {
+        "formatter": {
+            "command": "ruff format .",
+            "check_command": "ruff format --check ."
+        },
+        "linter": {
+            "command": "ruff check .",
+            "fix_command": "ruff check --fix ."
+        },
+        "type_checker": {
+            "command": "ty check --ignore unresolved-import --exclude codebase_rag/tests"
+        },
+        "test_runner": {
+            "command": "pytest",
+            "verbose": "pytest -v",
+            "coverage": "pytest --cov"
+        }
+    },
+    "quality_checks": [
+        {
+            "name": "install",
+            "command": "{install} --extra test"
+        },
+        {
+            "name": "ruff-lint",
+            "command": "{run_prefix} ruff check ."
+        },
+        {
+            "name": "ruff-format",
+            "command": "{run_prefix} ruff format --check ."
+        },
+        {
+            "name": "ty",
+            "command": "{run_prefix} ty check --ignore unresolved-import --exclude codebase_rag/tests"
+        },
+        {
+            "name": "pytest",
+            "command": "{run_prefix} pytest codebase_rag/tests/integration/test_cli_staleness_integration.py"
+        }
+    ],
+    "doc_command": "{run_prefix} sphinx-build docs docs/_build",
+    "agent_context": {
+        "file_extensions": [".py", ".pyi"],
+        "config_files": [
+            "pyproject.toml",
+            "uv.lock",
+            "poetry.lock",
+            "requirements.txt",
+            "ruff.toml"
+        ],
+        "standard_workflow": [
+            "Read mission file",
+            "Run dependency install (uv sync / poetry install / pip install)",
+            "Analyze Python code",
+            "Implement changes",
+            "Run ruff lint and fix",
+            "Run mypy type checking",
+            "Run pytest to verify tests",
+            "Run ruff format",
+            "Commit changes"
+        ]
+    }
+}
