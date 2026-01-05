@@ -13,6 +13,11 @@ PASS_2_FILES = (
 )
 PASS_3_CALLS = "--- Pass 3: Processing Function Calls from AST Cache ---"
 PASS_4_EMBEDDINGS = "--- Pass 4: Generating semantic embeddings ---"
+VALIDATION_START = "--- Validation: Checking CALLS targets ---"
+VALIDATION_NO_ORPHANS = "No orphaned CALLS relationships detected."
+VALIDATION_FOUND_ORPHANS = "Found {count} orphaned CALLS relationships."
+VALIDATION_ORPHAN_SAMPLE = "  Orphan {index}: {from_label}.{from_val} -> {to_label}.{to_val}"
+VALIDATION_SKIPPED = "Skipping relationship validation; ingestor does not support it."
 
 # (H) Analysis logs
 FOUND_FUNCTIONS = "\n--- Found {count} functions/methods in codebase ---"

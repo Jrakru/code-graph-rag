@@ -399,9 +399,13 @@ NODE_SCHEMAS: tuple[NodeSchema, ...] = (
         NodeLabel.PACKAGE, "{qualified_name: string, name: string, path: string}"
     ),
     NodeSchema(NodeLabel.FOLDER, "{path: string, name: string}"),
-    NodeSchema(NodeLabel.FILE, "{path: string, name: string, extension: string}"),
     NodeSchema(
-        NodeLabel.MODULE, "{qualified_name: string, name: string, path: string}"
+        NodeLabel.FILE,
+        "{path: string, name: string, extension: string, parsed_at: string, file_mtime: float, file_hash: string}",
+    ),
+    NodeSchema(
+        NodeLabel.MODULE,
+        "{qualified_name: string, name: string, path: string, parsed_at: string, file_mtime: float, file_hash: string}",
     ),
     NodeSchema(
         NodeLabel.CLASS,

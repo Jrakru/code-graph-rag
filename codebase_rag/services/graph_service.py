@@ -40,6 +40,7 @@ from ..types_defs import (
     RelBatchRow,
     ResultRow,
 )
+from .validation_engine import ValidationEngine
 
 
 class MemgraphIngestor:
@@ -59,6 +60,9 @@ class MemgraphIngestor:
                 dict[str, PropertyValue] | None,
             ]
         ] = []
+        self.validation_engine = ValidationEngine(
+            query_service=self, pending_node_exists=self._pending_node_exists
+        )
 
     def __enter__(self) -> "MemgraphIngestor":
         logger.info(ls.MG_CONNECTING.format(host=self._host, port=self._port))
@@ -203,6 +207,47 @@ class MemgraphIngestor:
             self.flush_nodes()
             self.flush_relationships()
 
+    def create_relationship(
+        self,
+        from_spec: tuple[str, str, PropertyValue],
+        rel_type: str,
+        to_spec: tuple[str, str, PropertyValue],
+        properties: dict[str, PropertyValue] | None = None,
+    ) -> bool:
+        if (
+            rel_type == REL_TYPE_CALLS
+            and self.conn
+            and isinstance(self.conn, mgclient.Connection)
+            and not self.validation_engine.validate_relationship(
+                from_spec, rel_type, to_spec
+            )
+        ):
+            return False
+        self.ensure_relationship_batch(from_spec, rel_type, to_spec, properties)
+        return True
+
+    def validate_relationships(self) -> None:
+        if not self.relationship_buffer:
+            return
+        if not self.conn or not isinstance(self.conn, mgclient.Connection):
+            return
+
+        self.validation_engine.clear_orphans()
+        validated: list[
+            tuple[
+                tuple[str, str, PropertyValue],
+                str,
+                tuple[str, str, PropertyValue],
+                dict[str, PropertyValue] | None,
+            ]
+        ] = []
+        for from_spec, rel_type, to_spec, props in self.relationship_buffer:
+            if self.validation_engine.validate_relationship(
+                from_spec, rel_type, to_spec
+            ):
+                validated.append((from_spec, rel_type, to_spec, props))
+        self.relationship_buffer = validated
+
     def flush_nodes(self) -> None:
         if not self.node_buffer:
             return
@@ -252,6 +297,9 @@ class MemgraphIngestor:
         self.node_buffer.clear()
 
     def flush_relationships(self) -> None:
+        if not self.relationship_buffer:
+            return
+        self.validate_relationships()
         if not self.relationship_buffer:
             return
 
@@ -348,3 +396,11 @@ class MemgraphIngestor:
 
     def _get_current_timestamp(self) -> str:
         return datetime.now(UTC).isoformat()
+
+    def _pending_node_exists(
+        self, label: str, key: str, value: PropertyValue
+    ) -> bool:
+        for node_label, props in self.node_buffer:
+            if node_label == label and props.get(key) == value:
+                return True
+        return False

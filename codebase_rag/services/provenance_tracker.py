@@ -1,23 +1,63 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any
+
+from loguru import logger
 
 from .. import constants as cs
+from .. import logs as ls
 from ..cypher_queries import CYPHER_FETCH_FILE_HASHES
-from ..services import QueryProtocol
+
+if TYPE_CHECKING:
+    from . import QueryProtocol
 
 
-@dataclass(frozen=True)
 class ProvenanceTracker:
-    ingestor: QueryProtocol
-    repo_root: Path
+    def __init__(
+        self,
+        ingestor: QueryProtocol | None = None,
+        repo_root: Path | str | None = None,
+        chunk_size: int = cs.BYTES_PER_MB,
+    ) -> None:
+        if chunk_size < 1:
+            raise ValueError("chunk_size must be positive")
+        self.ingestor = ingestor
+        self.repo_root = Path(repo_root).resolve() if repo_root is not None else None
+        self.chunk_size = chunk_size
 
-    def __init__(self, ingestor: QueryProtocol, repo_root: Path | str) -> None:
-        object.__setattr__(self, "ingestor", ingestor)
-        object.__setattr__(self, "repo_root", Path(repo_root).resolve())
+    def record_parse(
+        self, file_path: Path | str, source_bytes: bytes | None = None
+    ) -> dict[str, str | float]:
+        path = Path(file_path)
+        try:
+            file_mtime = path.stat().st_mtime
+        except FileNotFoundError:
+            logger.warning(ls.SOURCE_FILE_NOT_FOUND.format(path=path))
+            return {}
+        except OSError as exc:
+            logger.error(ls.SOURCE_FILE_NOT_FOUND.format(path=path))
+            logger.error(str(exc))
+            return {}
+
+        try:
+            if source_bytes is not None:
+                file_hash = self._hash_bytes(source_bytes)
+            else:
+                file_hash = self._hash_file(path)
+        except OSError as exc:
+            logger.error(ls.SOURCE_FILE_NOT_FOUND.format(path=path))
+            logger.error(str(exc))
+            return {}
+
+        return {
+            cs.KEY_PARSED_AT: datetime.now(UTC).isoformat(),
+            cs.KEY_FILE_MTIME: file_mtime,
+            cs.KEY_FILE_HASH: file_hash,
+        }
 
     def is_stale(self, path: Path | str, file_hash: str | None) -> bool:
         """Return True when the given file hash is missing or differs from graph state."""
@@ -91,7 +131,8 @@ class ProvenanceTracker:
         if not normalized_paths:
             return {}
 
-        results = self.ingestor.fetch_all(
+        ingestor = self._require_ingestor()
+        results = ingestor.fetch_all(
             CYPHER_FETCH_FILE_HASHES, {cs.KEY_PATHS: normalized_paths}
         )
 
@@ -115,19 +156,21 @@ class ProvenanceTracker:
         return stored_hash != file_hash
 
     def _normalize_path(self, path: Path | str) -> str:
+        repo_root = self._require_repo_root()
         path_obj = Path(path)
         if path_obj.is_absolute():
             try:
-                return str(path_obj.relative_to(self.repo_root))
+                return str(path_obj.relative_to(repo_root))
             except ValueError:
                 return str(path_obj)
         return str(path_obj)
 
     def _path_exists(self, path: Path | str) -> bool:
+        repo_root = self._require_repo_root()
         path_obj = Path(path)
         if path_obj.is_absolute():
             return path_obj.exists()
-        return (self.repo_root / path_obj).exists()
+        return (repo_root / path_obj).exists()
 
     def _hash_is_valid(self, value: str | None) -> bool:
         return isinstance(value, str) and value != ""
@@ -136,3 +179,24 @@ class ProvenanceTracker:
         if isinstance(value, str):
             return value
         return None
+
+    def _hash_file(self, file_path: Path) -> str:
+        hasher = sha256()
+        with file_path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(self.chunk_size), b""):
+                hasher.update(chunk)
+        return hasher.hexdigest()
+
+    @staticmethod
+    def _hash_bytes(source_bytes: bytes) -> str:
+        return sha256(source_bytes).hexdigest()
+
+    def _require_ingestor(self) -> QueryProtocol:
+        if self.ingestor is None:
+            raise ValueError("ingestor is required for staleness checks")
+        return self.ingestor
+
+    def _require_repo_root(self) -> Path:
+        if self.repo_root is None:
+            raise ValueError("repo_root is required for staleness checks")
+        return self.repo_root
