@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-import torch
+import importlib
 
 from codebase_rag.unixcoder import Beam
+
+pytest = importlib.import_module("pytest")
+torch = pytest.importorskip("torch")
 
 
 class TestBeamInit:

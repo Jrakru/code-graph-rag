@@ -127,7 +127,7 @@ class StalenessChecker:
         normalized_extensions = normalize_extensions(extensions)
         compiled_pattern = compile_path_pattern(path_pattern)
 
-        file_hashes: dict[Path, str | None] = {}
+        file_hashes: dict[Path | str, str | None] = {}
         for path in self._iter_files(normalized_extensions, compiled_pattern):
             file_hashes[path] = compute_file_hash(path)
 

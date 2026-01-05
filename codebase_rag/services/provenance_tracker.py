@@ -41,10 +41,24 @@ class ProvenanceTracker:
         | Iterable[tuple[Path | str, str | None]],
     ) -> dict[str, bool]:
         """Batch staleness check keyed by normalized relative paths."""
+        items: list[tuple[Path | str, str | None]] = []
         if isinstance(files, Mapping):
-            items = list(files.items())
+            for path, file_hash in files.items():
+                if not isinstance(path, (str, Path)):
+                    continue
+                if file_hash is not None and not isinstance(file_hash, str):
+                    file_hash = None
+                items.append((path, file_hash))
         else:
-            items = list(files)
+            for entry in files:
+                if not isinstance(entry, tuple) or len(entry) != 2:
+                    continue
+                path, file_hash = entry
+                if not isinstance(path, (str, Path)):
+                    continue
+                if file_hash is not None and not isinstance(file_hash, str):
+                    file_hash = None
+                items.append((path, file_hash))
 
         if not items:
             return {}
