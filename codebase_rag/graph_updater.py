@@ -11,7 +11,7 @@ from . import logs as ls
 from .config import settings
 from .language_spec import LANGUAGE_FQN_SPECS, get_language_spec
 from .parsers.factory import ProcessorFactory
-from .services import IngestorProtocol, QueryProtocol
+from .services import FileClassifier, IngestorProtocol, QueryProtocol
 from .types_defs import (
     EmbeddingQueryResult,
     FunctionRegistry,
@@ -239,6 +239,7 @@ class GraphUpdater:
         )
         self.ast_cache = BoundedASTCache()
         self.ignore_spec = build_ignore_spec(self.repo_path, cs.IGNORE_PATTERNS)
+        self.file_classifier = FileClassifier()
 
         self.factory = ProcessorFactory(
             ingestor=self.ingestor,
@@ -248,6 +249,7 @@ class GraphUpdater:
             function_registry=self.function_registry,
             simple_name_lookup=self.simple_name_lookup,
             ast_cache=self.ast_cache,
+            file_classifier=self.file_classifier,
         )
 
     def _is_dependency_file(self, file_name: str, filepath: Path) -> bool:

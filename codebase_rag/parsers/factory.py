@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from ..constants import SupportedLanguage
+from ..protocols import FileClassifierProtocol
 from ..services import IngestorProtocol
 from ..types_defs import (
     ASTCacheProtocol,
@@ -25,6 +26,7 @@ class ProcessorFactory:
         function_registry: FunctionRegistryTrieProtocol,
         simple_name_lookup: SimpleNameLookup,
         ast_cache: ASTCacheProtocol,
+        file_classifier: FileClassifierProtocol | None = None,
     ) -> None:
         self.ingestor = ingestor
         self.repo_path = repo_path
@@ -33,6 +35,7 @@ class ProcessorFactory:
         self.function_registry = function_registry
         self.simple_name_lookup = simple_name_lookup
         self.ast_cache = ast_cache
+        self.file_classifier = file_classifier
 
         self.module_qn_to_file_path: dict[str, Path] = {}
 
@@ -61,6 +64,7 @@ class ProcessorFactory:
                 repo_path=self.repo_path,
                 project_name=self.project_name,
                 queries=self.queries,
+                file_classifier=self.file_classifier,
             )
         return self._structure_processor
 

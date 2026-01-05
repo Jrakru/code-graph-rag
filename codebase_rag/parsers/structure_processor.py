@@ -4,6 +4,7 @@ from loguru import logger
 
 from .. import constants as cs
 from .. import logs
+from ..protocols import FileClassifierProtocol
 from ..services import IngestorProtocol
 from ..types_defs import LanguageQueries, NodeIdentifier
 from ..utils.ignore import build_ignore_spec
@@ -16,6 +17,7 @@ class StructureProcessor:
         repo_path: Path,
         project_name: str,
         queries: dict[cs.SupportedLanguage, LanguageQueries],
+        file_classifier: FileClassifierProtocol | None = None,
     ):
         self.ingestor = ingestor
         self.repo_path = repo_path
@@ -23,6 +25,7 @@ class StructureProcessor:
         self.queries = queries
         self.structural_elements: dict[Path, str | None] = {}
         self.ignore_spec = build_ignore_spec(self.repo_path, cs.IGNORE_PATTERNS)
+        self.file_classifier = file_classifier
 
     def _get_parent_identifier(
         self, parent_rel_path: Path, parent_container_qn: str | None
@@ -108,12 +111,17 @@ class StructureProcessor:
             relative_root, parent_container_qn
         )
 
+        source_type = "code"
+        if self.file_classifier is not None:
+            source_type = self.file_classifier.classify(file_path).value
+
         self.ingestor.ensure_node_batch(
             cs.NodeLabel.FILE,
             {
                 cs.KEY_PATH: relative_filepath,
                 cs.KEY_NAME: file_name,
                 cs.KEY_EXTENSION: file_path.suffix,
+                cs.KEY_SOURCE_TYPE: source_type,
             },
         )
 

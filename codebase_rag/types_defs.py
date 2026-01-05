@@ -401,7 +401,7 @@ NODE_SCHEMAS: tuple[NodeSchema, ...] = (
     NodeSchema(NodeLabel.FOLDER, "{path: string, name: string}"),
     NodeSchema(
         NodeLabel.FILE,
-        "{path: string, name: string, extension: string, parsed_at: string, file_mtime: float, file_hash: string}",
+        "{path: string, name: string, extension: string, source_type: string, parsed_at: string, file_mtime: float, file_hash: string}",
     ),
     NodeSchema(
         NodeLabel.MODULE,
