@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import pytest
+import importlib
 
+pytest = importlib.import_module("pytest")
 torch = pytest.importorskip("torch")
 
 from codebase_rag.unixcoder import Beam  # noqa: E402

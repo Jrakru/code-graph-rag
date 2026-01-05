@@ -51,6 +51,9 @@ EMBEDDING_GENERATION_FAILED = "Failed to generate semantic embeddings: {error}"
 EMBEDDING_STORE_FAILED = "Failed to store embedding for {name}: {error}"
 EMBEDDING_SEARCH_FAILED = "Failed to search embeddings: {error}"
 
+# (H) Staleness logs
+STALENESS_CHECK_FAILED = "Staleness check failed: {error}"
+
 # (H) Image logs
 IMAGE_COPIED = "Copied image to temporary path: {path}"
 
