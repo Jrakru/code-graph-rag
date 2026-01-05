@@ -1,16 +1,26 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 from loguru import logger
 from tree_sitter import Node
 
 from .. import constants as cs
 from .. import logs as ls
+from ..services.confidence_scorer import ResolutionMethod
 from ..types_defs import FunctionRegistryTrieProtocol, NodeType
 from .import_processor import ImportProcessor
 from .py import resolve_class_name
 from .type_inference import TypeInferenceEngine
+
+
+@dataclass(frozen=True)
+class ResolutionResult:
+    callee_type: str
+    callee_qn: str
+    method: ResolutionMethod
+    ambiguity_count: int = 1
 
 
 class CallResolver:
@@ -69,6 +79,58 @@ class CallResolver:
 
         return self._try_resolve_via_trie(call_name, module_qn)
 
+    def resolve_function_call_with_confidence(
+        self,
+        call_name: str,
+        module_qn: str,
+        local_var_types: dict[str, str] | None = None,
+        class_context: str | None = None,
+    ) -> ResolutionResult | None:
+        if result := self._wrap_resolution(
+            self._try_resolve_iife(call_name, module_qn), ResolutionMethod.IIFE
+        ):
+            return result
+
+        if self._is_super_call(call_name):
+            return self._wrap_resolution(
+                self._resolve_super_call(call_name, class_context),
+                ResolutionMethod.INHERITED_METHOD,
+            )
+
+        if cs.SEPARATOR_DOT in call_name and self._is_method_chain(call_name):
+            return self._resolve_chained_call_with_method(
+                call_name, module_qn, local_var_types
+            )
+
+        if result := self._try_resolve_via_imports_with_method(
+            call_name, module_qn, local_var_types
+        ):
+            return result
+
+        if result := self._wrap_resolution(
+            self._try_resolve_same_module(call_name, module_qn),
+            ResolutionMethod.SAME_MODULE,
+        ):
+            return result
+
+        return self._try_resolve_via_trie_with_method(call_name, module_qn)
+
+    def _wrap_resolution(
+        self,
+        result: tuple[str, str] | None,
+        method: ResolutionMethod,
+        ambiguity_count: int = 1,
+    ) -> ResolutionResult | None:
+        if not result:
+            return None
+        callee_type, callee_qn = result
+        return ResolutionResult(
+            callee_type=callee_type,
+            callee_qn=callee_qn,
+            method=method,
+            ambiguity_count=ambiguity_count,
+        )
+
     def _try_resolve_iife(
         self, call_name: str, module_qn: str
     ) -> tuple[str, str] | None:
@@ -112,6 +174,33 @@ class CallResolver:
 
         return self._try_resolve_wildcard_imports(call_name, import_map)
 
+    def _try_resolve_via_imports_with_method(
+        self,
+        call_name: str,
+        module_qn: str,
+        local_var_types: dict[str, str] | None,
+    ) -> ResolutionResult | None:
+        if module_qn not in self.import_processor.import_mapping:
+            return None
+
+        import_map = self.import_processor.import_mapping[module_qn]
+
+        if result := self._wrap_resolution(
+            self._try_resolve_direct_import(call_name, import_map),
+            ResolutionMethod.DIRECT_IMPORT,
+        ):
+            return result
+
+        if result := self._try_resolve_qualified_call_with_method(
+            call_name, import_map, module_qn, local_var_types
+        ):
+            return result
+
+        return self._wrap_resolution(
+            self._try_resolve_wildcard_imports(call_name, import_map),
+            ResolutionMethod.WILDCARD_IMPORT,
+        )
+
     def _try_resolve_direct_import(
         self, call_name: str, import_map: dict[str, str]
     ) -> tuple[str, str] | None:
@@ -150,6 +239,34 @@ class CallResolver:
             )
 
         return self._resolve_multi_part_call(
+            parts, call_name, import_map, module_qn, local_var_types
+        )
+
+    def _try_resolve_qualified_call_with_method(
+        self,
+        call_name: str,
+        import_map: dict[str, str],
+        module_qn: str,
+        local_var_types: dict[str, str] | None,
+    ) -> ResolutionResult | None:
+        if not self._has_separator(call_name):
+            return None
+
+        separator = self._get_separator(call_name)
+        parts = call_name.split(separator)
+
+        if len(parts) == 2:
+            if result := self._resolve_two_part_call_with_method(
+                parts, call_name, separator, import_map, module_qn, local_var_types
+            ):
+                return result
+
+        if len(parts) >= 3 and parts[0] == cs.KEYWORD_SELF:
+            return self._resolve_self_attribute_call_with_method(
+                parts, call_name, import_map, module_qn, local_var_types
+            )
+
+        return self._resolve_multi_part_call_with_method(
             parts, call_name, import_map, module_qn, local_var_types
         )
 
@@ -222,6 +339,29 @@ class CallResolver:
         )
         return self.function_registry[best_candidate_qn], best_candidate_qn
 
+    def _try_resolve_via_trie_with_method(
+        self, call_name: str, module_qn: str
+    ) -> ResolutionResult | None:
+        search_name = re.split(r"[.:]|::", call_name)[-1]
+        possible_matches = self.function_registry.find_ending_with(search_name)
+        if not possible_matches:
+            logger.debug(ls.CALL_UNRESOLVED.format(call_name=call_name))
+            return None
+
+        possible_matches.sort(
+            key=lambda qn: self._calculate_import_distance(qn, module_qn)
+        )
+        best_candidate_qn = possible_matches[0]
+        logger.debug(
+            ls.CALL_TRIE_FALLBACK.format(call_name=call_name, qn=best_candidate_qn)
+        )
+        return ResolutionResult(
+            callee_type=self.function_registry[best_candidate_qn],
+            callee_qn=best_candidate_qn,
+            method=ResolutionMethod.TRIE_FALLBACK,
+            ambiguity_count=len(possible_matches),
+        )
+
     def _resolve_two_part_call(
         self,
         parts: list[str],
@@ -251,6 +391,41 @@ class CallResolver:
 
         return self._try_resolve_module_method(method_name, call_name, module_qn)
 
+    def _resolve_two_part_call_with_method(
+        self,
+        parts: list[str],
+        call_name: str,
+        separator: str,
+        import_map: dict[str, str],
+        module_qn: str,
+        local_var_types: dict[str, str] | None,
+    ) -> ResolutionResult | None:
+        object_name, method_name = parts
+
+        if result := self._try_resolve_via_local_type_with_method(
+            object_name,
+            method_name,
+            separator,
+            call_name,
+            import_map,
+            module_qn,
+            local_var_types,
+        ):
+            return result
+
+        if result := self._wrap_resolution(
+            self._try_resolve_via_import(
+                object_name, method_name, separator, call_name, import_map
+            ),
+            ResolutionMethod.DIRECT_IMPORT,
+        ):
+            return result
+
+        return self._wrap_resolution(
+            self._try_resolve_module_method(method_name, call_name, module_qn),
+            ResolutionMethod.SAME_MODULE,
+        )
+
     def _try_resolve_via_local_type(
         self,
         object_name: str,
@@ -278,6 +453,66 @@ class CallResolver:
             return (
                 cs.NodeLabel.FUNCTION,
                 f"{cs.BUILTIN_PREFIX}{cs.SEPARATOR_DOT}{var_type}{cs.SEPARATOR_PROTOTYPE}{method_name}",
+            )
+        return None
+
+    def _try_resolve_via_local_type_with_method(
+        self,
+        object_name: str,
+        method_name: str,
+        separator: str,
+        call_name: str,
+        import_map: dict[str, str],
+        module_qn: str,
+        local_var_types: dict[str, str] | None,
+    ) -> ResolutionResult | None:
+        if not local_var_types or object_name not in local_var_types:
+            return None
+
+        var_type = local_var_types[object_name]
+
+        if class_qn := self._resolve_class_qn_from_type(
+            var_type, import_map, module_qn
+        ):
+            method_qn = f"{class_qn}{separator}{method_name}"
+            if method_qn in self.function_registry:
+                logger.debug(
+                    ls.CALL_TYPE_INFERRED.format(
+                        call_name=call_name,
+                        method_qn=method_qn,
+                        obj=object_name,
+                        var_type=var_type,
+                    )
+                )
+                return ResolutionResult(
+                    callee_type=self.function_registry[method_qn],
+                    callee_qn=method_qn,
+                    method=ResolutionMethod.TYPE_INFERENCE,
+                )
+
+            if inherited := self._resolve_inherited_method(class_qn, method_name):
+                logger.debug(
+                    ls.CALL_TYPE_INFERRED_INHERITED.format(
+                        call_name=call_name,
+                        method_qn=inherited[1],
+                        obj=object_name,
+                        var_type=var_type,
+                    )
+                )
+                return ResolutionResult(
+                    callee_type=inherited[0],
+                    callee_qn=inherited[1],
+                    method=ResolutionMethod.INHERITED_METHOD,
+                )
+
+        if var_type in cs.JS_BUILTIN_TYPES:
+            return ResolutionResult(
+                callee_type=cs.NodeLabel.FUNCTION,
+                callee_qn=(
+                    f"{cs.BUILTIN_PREFIX}{cs.SEPARATOR_DOT}"
+                    f"{var_type}{cs.SEPARATOR_PROTOTYPE}{method_name}"
+                ),
+                method=ResolutionMethod.TYPE_INFERENCE,
             )
         return None
 
@@ -425,6 +660,57 @@ class CallResolver:
 
         return None
 
+    def _resolve_self_attribute_call_with_method(
+        self,
+        parts: list[str],
+        call_name: str,
+        import_map: dict[str, str],
+        module_qn: str,
+        local_var_types: dict[str, str] | None,
+    ) -> ResolutionResult | None:
+        attribute_ref = cs.SEPARATOR_DOT.join(parts[:-1])
+        method_name = parts[-1]
+
+        if local_var_types and attribute_ref in local_var_types:
+            var_type = local_var_types[attribute_ref]
+            if class_qn := self._resolve_class_qn_from_type(
+                var_type, import_map, module_qn
+            ):
+                method_qn = f"{class_qn}.{method_name}"
+                if method_qn in self.function_registry:
+                    logger.debug(
+                        ls.CALL_INSTANCE_ATTR.format(
+                            call_name=call_name,
+                            method_qn=method_qn,
+                            attr_ref=attribute_ref,
+                            var_type=var_type,
+                        )
+                    )
+                    return ResolutionResult(
+                        callee_type=self.function_registry[method_qn],
+                        callee_qn=method_qn,
+                        method=ResolutionMethod.TYPE_INFERENCE,
+                    )
+
+                if inherited_method := self._resolve_inherited_method(
+                    class_qn, method_name
+                ):
+                    logger.debug(
+                        ls.CALL_INSTANCE_ATTR_INHERITED.format(
+                            call_name=call_name,
+                            method_qn=inherited_method[1],
+                            attr_ref=attribute_ref,
+                            var_type=var_type,
+                        )
+                    )
+                    return ResolutionResult(
+                        callee_type=inherited_method[0],
+                        callee_qn=inherited_method[1],
+                        method=ResolutionMethod.INHERITED_METHOD,
+                    )
+
+        return None
+
     def _resolve_multi_part_call(
         self,
         parts: list[str],
@@ -476,6 +762,72 @@ class CallResolver:
                         )
                     )
                     return inherited_method
+
+        return None
+
+    def _resolve_multi_part_call_with_method(
+        self,
+        parts: list[str],
+        call_name: str,
+        import_map: dict[str, str],
+        module_qn: str,
+        local_var_types: dict[str, str] | None,
+    ) -> ResolutionResult | None:
+        class_name = parts[0]
+        method_name = cs.SEPARATOR_DOT.join(parts[1:])
+
+        if class_name in import_map:
+            class_qn = import_map[class_name]
+            method_qn = f"{class_qn}.{method_name}"
+            if method_qn in self.function_registry:
+                logger.debug(
+                    ls.CALL_IMPORT_QUALIFIED.format(
+                        call_name=call_name, method_qn=method_qn
+                    )
+                )
+                return ResolutionResult(
+                    callee_type=self.function_registry[method_qn],
+                    callee_qn=method_qn,
+                    method=ResolutionMethod.DIRECT_IMPORT,
+                )
+
+        if local_var_types and class_name in local_var_types:
+            var_type = local_var_types[class_name]
+            if class_qn := self._resolve_class_qn_from_type(
+                var_type, import_map, module_qn
+            ):
+                method_qn = f"{class_qn}.{method_name}"
+                if method_qn in self.function_registry:
+                    logger.debug(
+                        ls.CALL_INSTANCE_QUALIFIED.format(
+                            call_name=call_name,
+                            method_qn=method_qn,
+                            class_name=class_name,
+                            var_type=var_type,
+                        )
+                    )
+                    return ResolutionResult(
+                        callee_type=self.function_registry[method_qn],
+                        callee_qn=method_qn,
+                        method=ResolutionMethod.TYPE_INFERENCE,
+                    )
+
+                if inherited_method := self._resolve_inherited_method(
+                    class_qn, method_name
+                ):
+                    logger.debug(
+                        ls.CALL_INSTANCE_INHERITED.format(
+                            call_name=call_name,
+                            method_qn=inherited_method[1],
+                            class_name=class_name,
+                            var_type=var_type,
+                        )
+                    )
+                    return ResolutionResult(
+                        callee_type=inherited_method[0],
+                        callee_qn=inherited_method[1],
+                        method=ResolutionMethod.INHERITED_METHOD,
+                    )
 
         return None
 
@@ -580,6 +932,66 @@ class CallResolver:
                     )
                 )
                 return inherited_method
+
+        return None
+
+    def _resolve_chained_call_with_method(
+        self,
+        call_name: str,
+        module_qn: str,
+        local_var_types: dict[str, str] | None = None,
+    ) -> ResolutionResult | None:
+        match = re.search(r"\\.([^.()]+)$", call_name)
+        if not match:
+            return None
+
+        final_method = match[1]
+        object_expr = call_name[: match.start()]
+
+        if (
+            object_type
+            := self.type_inference.python_type_inference._infer_expression_return_type(
+                object_expr, module_qn, local_var_types
+            )
+        ):
+            full_object_type = object_type
+            if cs.SEPARATOR_DOT not in object_type:
+                if resolved_class := self._resolve_class_name(object_type, module_qn):
+                    full_object_type = resolved_class
+
+            method_qn = f"{full_object_type}.{final_method}"
+
+            if method_qn in self.function_registry:
+                logger.debug(
+                    ls.CALL_CHAINED.format(
+                        call_name=call_name,
+                        method_qn=method_qn,
+                        obj_expr=object_expr,
+                        obj_type=object_type,
+                    )
+                )
+                return ResolutionResult(
+                    callee_type=self.function_registry[method_qn],
+                    callee_qn=method_qn,
+                    method=ResolutionMethod.TYPE_INFERENCE,
+                )
+
+            if inherited_method := self._resolve_inherited_method(
+                full_object_type, final_method
+            ):
+                logger.debug(
+                    ls.CALL_CHAINED_INHERITED.format(
+                        call_name=call_name,
+                        method_qn=inherited_method[1],
+                        obj_expr=object_expr,
+                        obj_type=object_type,
+                    )
+                )
+                return ResolutionResult(
+                    callee_type=inherited_method[0],
+                    callee_qn=inherited_method[1],
+                    method=ResolutionMethod.INHERITED_METHOD,
+                )
 
         return None
 

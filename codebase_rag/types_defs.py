@@ -391,6 +391,7 @@ class RelationshipSchema(NamedTuple):
     sources: tuple[NodeLabel, ...]
     rel_type: RelationshipType
     targets: tuple[NodeLabel, ...]
+    properties: str = ""
 
 
 NODE_SCHEMAS: tuple[NodeSchema, ...] = (
@@ -515,5 +516,6 @@ RELATIONSHIP_SCHEMAS: tuple[RelationshipSchema, ...] = (
         (NodeLabel.FUNCTION, NodeLabel.METHOD),
         RelationshipType.CALLS,
         (NodeLabel.FUNCTION, NodeLabel.METHOD),
+        "{confidence: float, resolution_method: string}",
     ),
 )

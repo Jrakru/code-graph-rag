@@ -174,6 +174,8 @@ KEY_VERSION_SPEC = "version_spec"
 KEY_PARSED_AT = "parsed_at"
 KEY_FILE_MTIME = "file_mtime"
 KEY_FILE_HASH = "file_hash"
+KEY_CONFIDENCE = "confidence"
+KEY_RESOLUTION_METHOD = "resolution_method"
 
 ERR_SUBSTR_ALREADY_EXISTS = "already exists"
 ERR_SUBSTR_CONSTRAINT = "constraint"

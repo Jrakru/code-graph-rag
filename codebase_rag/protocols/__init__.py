@@ -3,7 +3,10 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from enum import StrEnum
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from ..services.confidence_scorer import ResolutionMethod
 
 type PathLike = str | Path
 type ParseRecord = dict[str, object]
@@ -38,7 +41,12 @@ class ProvenanceTrackerProtocol(Protocol):
 
 @runtime_checkable
 class ConfidenceScorerProtocol(Protocol):
-    def score(self, method: str, ambiguity_count: int) -> float: ...
+    def score(
+        self,
+        method: "ResolutionMethod",
+        ambiguity_count: int = 1,
+        **context: Any,
+    ) -> float: ...
 
 
 @runtime_checkable

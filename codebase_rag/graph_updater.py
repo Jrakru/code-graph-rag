@@ -11,7 +11,9 @@ from . import logs as ls
 from .config import settings
 from .language_spec import LANGUAGE_FQN_SPECS, get_language_spec
 from .parsers.factory import ProcessorFactory
+from .protocols import ConfidenceScorerProtocol
 from .services import FileClassifier, IngestorProtocol, QueryProtocol
+from .services.confidence_scorer import ConfidenceScorer
 from .types_defs import (
     EmbeddingQueryResult,
     FunctionRegistry,
@@ -227,6 +229,7 @@ class GraphUpdater:
         repo_path: Path,
         parsers: dict[cs.SupportedLanguage, Parser],
         queries: dict[cs.SupportedLanguage, LanguageQueries],
+        confidence_scorer: ConfidenceScorerProtocol | None = None,
     ):
         self.ingestor = ingestor
         self.repo_path = repo_path
@@ -240,6 +243,7 @@ class GraphUpdater:
         self.ast_cache = BoundedASTCache()
         self.ignore_spec = build_ignore_spec(self.repo_path, cs.IGNORE_PATTERNS)
         self.file_classifier = FileClassifier()
+        self.confidence_scorer = confidence_scorer or ConfidenceScorer()
 
         self.factory = ProcessorFactory(
             ingestor=self.ingestor,
@@ -250,6 +254,7 @@ class GraphUpdater:
             simple_name_lookup=self.simple_name_lookup,
             ast_cache=self.ast_cache,
             file_classifier=self.file_classifier,
+            confidence_scorer=self.confidence_scorer,
         )
 
     def _is_dependency_file(self, file_name: str, filepath: Path) -> bool:

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from ..constants import SupportedLanguage
-from ..protocols import FileClassifierProtocol
+from ..protocols import ConfidenceScorerProtocol, FileClassifierProtocol
 from ..services import IngestorProtocol
 from ..types_defs import (
     ASTCacheProtocol,
@@ -27,6 +27,7 @@ class ProcessorFactory:
         simple_name_lookup: SimpleNameLookup,
         ast_cache: ASTCacheProtocol,
         file_classifier: FileClassifierProtocol | None = None,
+        confidence_scorer: ConfidenceScorerProtocol | None = None,
     ) -> None:
         self.ingestor = ingestor
         self.repo_path = repo_path
@@ -36,6 +37,7 @@ class ProcessorFactory:
         self.simple_name_lookup = simple_name_lookup
         self.ast_cache = ast_cache
         self.file_classifier = file_classifier
+        self._confidence_scorer = confidence_scorer
 
         self.module_qn_to_file_path: dict[str, Path] = {}
 
@@ -109,5 +111,6 @@ class ProcessorFactory:
                 import_processor=self.import_processor,
                 type_inference=self.type_inference,
                 class_inheritance=self.definition_processor.class_inheritance,
+                confidence_scorer=self._confidence_scorer,
             )
         return self._call_processor

@@ -1,24 +1,71 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Any
+
 from ..protocols import ConfidenceScorerProtocol
 
 
+class ResolutionMethod(StrEnum):
+    """Method used to resolve a call."""
+
+    DIRECT_IMPORT = "direct_import"
+    TYPE_INFERENCE = "type_inference"
+    SAME_MODULE = "same_module"
+    INHERITED_METHOD = "inherited_method"
+    IIFE = "iife"
+    WILDCARD_IMPORT = "wildcard_import"
+    TRIE_FALLBACK = "trie_fallback"
+    UNRESOLVED = "unresolved"
+
+
+@dataclass
+class ConfidenceConfig:
+    """Configuration for confidence scoring weights."""
+
+    direct_import_base: float = 1.0
+    same_module_base: float = 0.95
+    type_inference_base: float = 0.9
+    inherited_method_base: float = 0.85
+    iife_base: float = 0.8
+    wildcard_import_base: float = 0.7
+    trie_fallback_base: float = 0.5
+
+    ambiguity_penalty_per_match: float = 0.05
+    max_ambiguity_penalty: float = 0.3
+
+
 class ConfidenceScorer(ConfidenceScorerProtocol):
-    def __init__(self, base_score: float = 1.0, ambiguity_penalty: float = 0.1):
-        self._base_score = max(0.0, min(1.0, base_score))
-        self._ambiguity_penalty = max(0.0, ambiguity_penalty)
+    """Scores confidence of call resolutions."""
 
-    def score(self, method: str, ambiguity_count: int) -> float:
-        normalized = method.strip().lower()
-        base = self._base_score
+    def __init__(self, config: ConfidenceConfig | None = None) -> None:
+        self.config = config or ConfidenceConfig()
 
-        if normalized:
-            if any(token in normalized for token in ("fallback", "wildcard", "trie")):
-                base = min(base, 0.7)
-            elif any(token in normalized for token in ("direct", "exact", "same")):
-                base = min(base, 1.0)
-            else:
-                base = min(base, 0.85)
+    def score(
+        self,
+        method: ResolutionMethod,
+        ambiguity_count: int = 1,
+        **context: Any,
+    ) -> float:
+        base_scores = {
+            ResolutionMethod.DIRECT_IMPORT: self.config.direct_import_base,
+            ResolutionMethod.SAME_MODULE: self.config.same_module_base,
+            ResolutionMethod.TYPE_INFERENCE: self.config.type_inference_base,
+            ResolutionMethod.INHERITED_METHOD: self.config.inherited_method_base,
+            ResolutionMethod.IIFE: self.config.iife_base,
+            ResolutionMethod.WILDCARD_IMPORT: self.config.wildcard_import_base,
+            ResolutionMethod.TRIE_FALLBACK: self.config.trie_fallback_base,
+            ResolutionMethod.UNRESOLVED: 0.0,
+        }
 
-        penalty = max(0.0, ambiguity_count * self._ambiguity_penalty)
-        return max(0.0, min(1.0, base - penalty))
+        base = base_scores.get(method, 0.5)
+
+        if method == ResolutionMethod.TRIE_FALLBACK and ambiguity_count > 1:
+            penalty = min(
+                (ambiguity_count - 1) * self.config.ambiguity_penalty_per_match,
+                self.config.max_ambiguity_penalty,
+            )
+            base -= penalty
+
+        return max(0.0, min(1.0, base))
